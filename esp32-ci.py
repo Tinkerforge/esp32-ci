@@ -1286,6 +1286,7 @@ def index():
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-w', '--workspace')
+    parser.add_argument('-l', '--listen-port', default=5000)
     args = parser.parse_args()
     ws = Path(args.workspace)
 
@@ -1296,4 +1297,4 @@ if __name__ == '__main__':
     to_main = Queue()
     main = Main(to_main, ws)
 
-    app.run(host='::')
+    app.run(host='::', port=args.listen_port)
