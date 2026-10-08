@@ -1224,21 +1224,6 @@ class Main:
             if self.current_task is None and len(self._task_queue) == 0 and not isinstance(self.completed_tasks[-1], SendEmail):
                 self.enqueue(SendEmail(self))
 
-        return
-        with tfutil.ChangedDirectory(self.workspace):
-            self.ci_state = CIState.read(self.workspace)
-            self.ci_state.build_number += 1
-
-            try:
-                self.pull_repos()
-
-                results = [self.compile_firmware(env) for env in self.environments]
-                results[0].rc = 1
-                self.send_mail(results)
-
-            finally:
-                self.ci_state.write(self.workspace)
-
 
 app = Flask(__name__, static_folder="./static")
 
