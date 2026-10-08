@@ -1221,7 +1221,7 @@ class Main:
                 self.enqueue(build_pipeline(self))
 
             # Send email if nothing else to-do and not already done.
-            if self.current_task is None and len(self._task_queue) == 0 and not isinstance(self.completed_tasks[-1], SendEmail):
+            if self.current_task is None and len(self._task_queue) == 0 and len(self.completed_tasks) > 0 and not isinstance(self.completed_tasks[-1], SendEmail):
                 self.enqueue(SendEmail(self))
 
 
