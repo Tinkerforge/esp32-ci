@@ -1,0 +1,14 @@
+[Unit]
+Description=ESP32 CI
+StartLimitIntervalSec=0
+
+[Service]
+User=ci
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+ExecStart=%Y/esp32-ci.py --workspace %Y/../
+KillSignal=SIGINT
+Restart=always
+RestartSec=60
+
+[Install]
+WantedBy=multi-user.target
