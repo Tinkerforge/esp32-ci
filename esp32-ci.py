@@ -1054,7 +1054,12 @@ def build_pipeline(m: 'Main'):
         if esp_host is None:
             return CompileFirmware(m, name_prefix=e.name, env=e)
 
-        pi_host = f'{esp_host}-pi'
+        if "." in esp_hostname:
+            esp_hostname, rest = esp_host.split(".", maxsplit=1)
+        else:
+            esp_hostname, rest = esp_host, ""
+
+        pi_host = f'{esp_hostname}-pi{rest}'
         pi_user = 'pi'
 
         return \
