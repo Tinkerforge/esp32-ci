@@ -644,7 +644,9 @@ class RunTests(RunRemoteProcess):
         return 'finished' if plain_matrix.result_stats[CaseResult.FAILED] == 0 else 'failed'
 
     def mail_body(self):
-        if self.state != 'finished':
+        tests_executed = self.state == 'finished' or self.state == 'failed' and self.html_details is not None
+
+        if not tests_executed:
             return super().mail_body()
 
 
