@@ -665,9 +665,9 @@ class RunTests(RunRemoteProcess):
 
         details_start = self.html_details.index('</h1>') + len('</h1>')
         details_end = self.html_details.index('<p class="footer">')
-        self.html_details = self.html_details[details_start:details_end]
+        details = self.html_details[details_start:details_end]
 
-        table = f'<div class="junit">{self.html_summary[table_start:table_end]} <details><summary>Test results</summary>{self.html_details}</details></div>'
+        table = f'<div class="junit">{self.html_summary[table_start:table_end]} <details><summary>Test results</summary>{details}</details></div>'
 
         table = re.sub(r'href="[^#]*', 'href="', table)
 
