@@ -536,7 +536,7 @@ class PrepareRPI(RunRemoteProcess):
 
     def __post_init__(self):
         super().__post_init__()
-        self.cmd = f'git archive master . | ssh {self.user}@{self.host} '\
+        self.cmd = f'git archive HEAD . | ssh {self.user}@{self.host} '\
             '"'\
             'mv ~/tf/esp32-firmware/software/.venv /tmp/.venv; ' \
             'rm -rf ~/tf/esp32-firmware && ' \
