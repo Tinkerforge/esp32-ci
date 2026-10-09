@@ -12,13 +12,25 @@
 # ///
 
 """
-To set up a new workspace
-# - create a workspace directory
-# - clone gits into the workspace (use ssh to clone!)
-#   - at least esp32-ci and esp32-firmware
-# - create a config.jsonc in the workspace (see class Config)
-# - run esp32-ci.py --workspace /path/to/workspace
-#   or systemctl enable --user esp32-ci@/path/to/workspace.service
+Install instructions (assuming Debian >= 13.6)
+- install git, curl, uv
+- create ci user
+- create 'workspace' directory in /home/ci
+- clone gits into the workspace (use ssh to clone!)
+  - at least esp32-ci and esp32-firmware
+- create a config.jsonc in the workspace (see class Config)
+- run esp32-ci.py --workspace /path/to/workspace
+  or copy esp32-ci.service to /etc/systemd/system and run
+  systemctl daemon-reload && systemctl enable esp32-ci.service
+- on each testbox
+    - if ESP is warp2-AbCd, set Pi's hostname to warp2-AbCd-pi
+    - install raspbian lite 64 bit
+    - sudo apt update && sudo apt upgrade
+    - install uv
+- for each testbox
+    - make sure this machine can ssh into the testbox (ssh-copy-id pi@testbox-host)
+- on each testbox
+    - enable ram overlay
 """
 
 """
@@ -1055,7 +1067,7 @@ def build_pipeline(m: 'Main'):
         if esp_host is None:
             return CompileFirmware(m, name_prefix=e.name, env=e)
 
-        if "." in esp_hostname:
+        if "." in esp_host:
             esp_hostname, rest = esp_host.split(".", maxsplit=1)
         else:
             esp_hostname, rest = esp_host, ""
