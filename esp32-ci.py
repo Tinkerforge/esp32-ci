@@ -307,7 +307,7 @@ class Task:
     def mail_body(self) -> (str, (str, str), str):
         plain = f"{self.name} {self.state} {self.start_datetime.isoformat(" ")} Task #{self.task_number}"
 
-        html = f'<b>{self.name}</b> {self.state_html()} {self.start_datetime.isoformat(" ")} <a href="/task/{self.task_number}">Task #{self.task_number}</a>'
+        html = f'<b>{self.name}</b> {self.state_html()} {self.start_datetime.isoformat(" ")} Task #{self.task_number}'
         if self._log.tell() != 0:
             html = dedent(f"""\
                 <details>
@@ -453,7 +453,7 @@ class RunProcess(Task):
     def _mail_body_html_details(self, content):
         return dedent(f"""\
             <details>
-                <summary><b>{self.name}</b> {self.state_html()} {self.start_datetime.isoformat(" ")} <a href="/task/{self.task_number}">Task #{self.task_number}</a></summary>
+                <summary><b>{self.name}</b> {self.state_html()} {self.start_datetime.isoformat(" ")} Task #{self.task_number}</summary>
                 {content}
             </details>
         """)
@@ -845,7 +845,7 @@ class PullRepos(Task):
 
         html = dedent(f"""\
             <details style="display: block;" open>
-                <summary><b>Pulling repos</b> {self.state_html()} {self.start_datetime.isoformat(" ")} <a href="/task/{self.task_number}">Task #{self.task_number}</a></summary>
+                <summary><b>Pulling repos</b> {self.state_html()} {self.start_datetime.isoformat(" ")} Task #{self.task_number}</summary>
                 <div style="padding-left: 64px" class="commits">{commits_html}</div>
             </details>
         """)
