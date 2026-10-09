@@ -605,6 +605,10 @@ class RunTests(RunRemoteProcess):
     working_dir: Path = Path(".")
     cmd: list[str] = field(init=False)
 
+    plain_summary: str = None
+    html_summary: str = None
+    html_details: str = None
+
     def __post_init__(self):
         super().__post_init__()
         self.cmd = [
