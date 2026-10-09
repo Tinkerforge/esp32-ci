@@ -295,9 +295,6 @@ class Task:
     def _tick(self):
         raise NotImplementedError()
 
-    def get_row(self):
-        raise NotImplementedError()
-
     # Return something short.
     # Subject is "ESP32 CI broken! [task.mail_subject() for task in failed]"
     def mail_subject(self):
@@ -439,13 +436,6 @@ class RunProcess(Task):
     def _on_finished(self):
         return 'finished' if self.proc.returncode == 0 else 'failed'
 
-
-    def get_row(self):
-        return dedent(f"""\
-            {self.task_number}: {self.name}<br/>
-            {self.state}<br/>
-            <a href="/task/{self.task_number}">Details</a>
-        """)
 
     def mail_subject(self):
         return f"{self.name}"
@@ -800,10 +790,6 @@ class PullRepos(Task):
             return
 
         self._q.put('finished' if found_commits else 'skipped')
-
-    def get_row(self):
-        return f'pull repos {self.state}'
-
 
     def read_ci_config(self):
         envs = []
