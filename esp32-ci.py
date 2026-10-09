@@ -630,7 +630,7 @@ class RunTests(RunRemoteProcess):
                     html_matrix.add_report(f.name, show_toc=False)
                 except:
                     self.log(traceback.format_exc())
-                    self.state = 'errored'
+                    self.state = 'failed'
                     return super().mail_body()
 
                 html_summary = html_matrix.summary()
