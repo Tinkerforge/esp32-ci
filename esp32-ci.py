@@ -586,7 +586,7 @@ class FlashFirmware(RunRemoteProcess):
             "ssh",
             f"{self.user}@{self.host}",
             "-t",
-            f"bash -ic \"cd ~/tf/esp32-firmware/software; ./ff --no-serial --port /dev/ttyUSB0 /tmp/firmware.bin\""
+            f"bash -lc \"cd ~/tf/esp32-firmware/software; ./ff --no-serial --port /dev/ttyUSB0 /tmp/firmware.bin\""
         ]
 
 
@@ -611,7 +611,7 @@ class RunTests(RunRemoteProcess):
             "-q",
             f"{self.user}@{self.host}",
             "-t",
-            f"bash -ic \"cd tf/esp32-firmware/software; test_runner/test_runner.py \'{self.module_under_test}/{self.suite}/{self.test}\' --host {self.esp_host} --brickd localhost --junit-xml\""
+            f"bash -lc \"cd tf/esp32-firmware/software; test_runner/test_runner.py \'{self.module_under_test}/{self.suite}/{self.test}\' --host {self.esp_host} --brickd localhost --junit-xml\""
         ]
 
     def mail_body(self):
