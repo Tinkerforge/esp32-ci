@@ -609,12 +609,17 @@ class RunTests(RunRemoteProcess):
 
     def __post_init__(self):
         super().__post_init__()
+
+        tf = ""
+        if self.test_filter != "":
+            tf = f"'{self.test_filter}'"
+
         self.cmd = [
             "ssh",
             "-q",
             f"{self.user}@{self.host}",
             "-t",
-            f"bash -lc \"cd tf/esp32-firmware/software; test_runner/test_runner.py \'{self.test_filter}\' --host {self.esp_host} --brickd localhost --junit-xml\""
+            f"bash -lc \"cd tf/esp32-firmware/software; test_runner/test_runner.py {tf} --host {self.esp_host} --brickd localhost --junit-xml\""
         ]
 
     def _on_finished(self):
