@@ -641,7 +641,7 @@ class RunTests(RunRemoteProcess):
                 self.html_summary = html_matrix.summary()
                 self.html_details = (Path(d) / (f.name + '.html')).read_text()
 
-        return 'finished' if plain_matrix.report_stats[CaseResult.FAILED] == 0 else 'failed'
+        return 'finished' if plain_matrix.result_stats[CaseResult.FAILED] == 0 else 'failed'
 
     def mail_body(self):
         if self.state != 'finished':
