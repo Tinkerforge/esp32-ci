@@ -625,8 +625,14 @@ class RunTests(RunRemoteProcess):
 
             with NamedTemporaryFile(dir=d) as f:
                 f.write(self.stdout)
-                plain_matrix.add_report(f.name)
-                html_matrix.add_report(f.name, show_toc=False)
+                try:
+                    plain_matrix.add_report(f.name)
+                    html_matrix.add_report(f.name, show_toc=False)
+                except:
+                    self.log(traceback.format_exc())
+                    self.state = 'errored'
+                    return super().mail_body()
+
                 html_summary = html_matrix.summary()
                 html_details = (Path(d) / (f.name + '.html')).read_text()
 
