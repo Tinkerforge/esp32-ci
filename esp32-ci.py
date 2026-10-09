@@ -536,7 +536,7 @@ class PrepareRPI(RunRemoteProcess):
 
     def __post_init__(self):
         super().__post_init__()
-        self.cmd = f'git archive master . | ssh -i /home/erik/.ssh/tf_id_ed25519 {self.user}@{self.host} '\
+        self.cmd = f'git archive master . | ssh {self.user}@{self.host} '\
             '"'\
             'mv ~/tf/esp32-firmware/software/.venv /tmp/.venv; ' \
             'rm -rf ~/tf/esp32-firmware && ' \
@@ -566,7 +566,6 @@ class UploadFirmware(RunRemoteProcess):
         super().__post_init__()
         self.cmd = [
             "scp",
-            "-i", "/home/erik/.ssh/tf_id_ed25519",
             str(self.file.resolve(strict=True)),
             f"{self.user}@{self.host}:/tmp/firmware.bin"
         ]
@@ -585,7 +584,6 @@ class FlashFirmware(RunRemoteProcess):
         super().__post_init__()
         self.cmd = [
             "ssh",
-            "-i", "/home/erik/.ssh/tf_id_ed25519",
             f"{self.user}@{self.host}",
             "-t",
             f"bash -ic \"cd ~/tf/esp32-firmware/software; ./ff --no-serial --port /dev/ttyUSB0 /tmp/firmware.bin\""
@@ -611,7 +609,6 @@ class RunTests(RunRemoteProcess):
         self.cmd = [
             "ssh",
             "-q",
-            "-i", "/home/erik/.ssh/tf_id_ed25519",
             f"{self.user}@{self.host}",
             "-t",
             f"bash -ic \"cd tf/esp32-firmware/software; test_runner/test_runner.py \'{self.module_under_test}/{self.suite}/{self.test}\' --host {self.esp_host} --brickd localhost --junit-xml\""
