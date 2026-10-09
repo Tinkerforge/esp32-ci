@@ -5,7 +5,7 @@ StartLimitIntervalSec=0
 [Service]
 User=ci
 AmbientCapabilities=CAP_NET_BIND_SERVICE
-ExecStart=%Y/esp32-ci.py --workspace %Y/../
+ExecStart=/bin/bash -l -c "~/workspace/esp32-ci/esp32-ci.py --workspace ~/workspace -l 80"
 KillSignal=SIGINT
 Restart=always
 RestartSec=1s
