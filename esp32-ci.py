@@ -769,6 +769,9 @@ class PullRepos(Task):
                     return
 
             for d in workspace.iterdir():
+                if d == workspace / REPO_NAME:
+                    continue
+
                 match self._pull_repo(d):
                     case 'error':
                         return
