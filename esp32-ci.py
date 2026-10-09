@@ -1069,6 +1069,7 @@ def build_pipeline(m: 'Main'):
 
         if "." in esp_host:
             esp_hostname, rest = esp_host.split(".", maxsplit=1)
+            rest = '.' + rest
         else:
             esp_hostname, rest = esp_host, ""
 
