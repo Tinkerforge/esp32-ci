@@ -215,6 +215,9 @@ class Task:
             raise Exception(f"Unknown state {repr(x)}")
         return x
 
+    def start_datestr(self) -> str:
+        return self.start_datetime.isoformat(" ") if self.state != 'enqueued' else 'enqueued'
+
 
     def start(self):
         if self.state == 'enqueued':
@@ -305,9 +308,9 @@ class Task:
 
     # Return plain text and HTML version
     def mail_body(self) -> (str, (str, str), str):
-        plain = f"{self.name} {self.state} {self.start_datetime.isoformat(" ")} Task #{self.task_number}"
+        plain = f"{self.name} {self.state} {self.start_datestr()} Task #{self.task_number}"
 
-        html = f'<b>{self.name}</b> {self.state_html()} {self.start_datetime.isoformat(" ")} Task #{self.task_number}'
+        html = f'<b>{self.name}</b> {self.state_html()} {self.start_datestr()} Task #{self.task_number}'
         if self._log.tell() != 0:
             html = dedent(f"""\
                 <details>
@@ -446,7 +449,7 @@ class RunProcess(Task):
     def _mail_body_html_details(self, content):
         return dedent(f"""\
             <details>
-                <summary><b>{self.name}</b> {self.state_html()} {self.start_datetime.isoformat(" ")} Task #{self.task_number}</summary>
+                <summary><b>{self.name}</b> {self.state_html()} {self.start_datestr()} Task #{self.task_number}</summary>
                 {content}
             </details>
         """)
@@ -834,7 +837,7 @@ class PullRepos(Task):
 
         html = dedent(f"""\
             <details style="display: block;" open>
-                <summary><b>Pulling repos</b> {self.state_html()} {self.start_datetime.isoformat(" ")} Task #{self.task_number}</summary>
+                <summary><b>Pulling repos</b> {self.state_html()} {self.start_datestr()} Task #{self.task_number}</summary>
                 <div style="padding-left: 64px" class="commits">{commits_html}</div>
             </details>
         """)
