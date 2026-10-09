@@ -687,8 +687,9 @@ class PullRepos(Task):
         self.repo_heads_post = self.get_repo_heads()
 
         if result == 'restart':
-            subprocess.Popen(f"sleep 0.1 && sudo systemctl restart esp32-ci@*.service", shell=True)
-            return 'finished'
+            # sys.exit only raises an exception, we want to stop all threads.
+            os._exit(os.EX_OK)
+            return 'skipped'
 
         return result
 
