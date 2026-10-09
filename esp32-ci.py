@@ -70,6 +70,7 @@ import git
 import tinkerforge_util as tfutil
 from ansi2html import Ansi2HTMLConverter
 from junit2htmlreport.matrix import TextReportMatrix, HtmlReportMatrix
+from junit2htmlreport.case_result import CaseResult
 
 REPO_NAME = 'esp32-ci'
 
@@ -433,7 +434,11 @@ class RunProcess(Task):
         # process finished
         self._finish()
 
+        return self._on_finished()
+
+    def _on_finished(self):
         return 'finished' if self.proc.returncode == 0 else 'failed'
+
 
     def get_row(self):
         return dedent(f"""\
@@ -614,13 +619,12 @@ class RunTests(RunRemoteProcess):
             f"bash -lc \"cd tf/esp32-firmware/software; test_runner/test_runner.py \'{self.module_under_test}/{self.suite}/{self.test}\' --host {self.esp_host} --brickd localhost --junit-xml\""
         ]
 
-    def mail_body(self):
-        if self.state != 'finished':
-            return super().mail_body()
-
-        plain_matrix = TextReportMatrix()
+    def _on_finished(self):
+        if self.proc.returncode != 0:
+            return 'failed'
 
         with TemporaryDirectory() as d:
+            plain_matrix = TextReportMatrix()
             html_matrix = HtmlReportMatrix(d)
 
             with NamedTemporaryFile(dir=d, delete_on_close=False) as f:
@@ -629,36 +633,44 @@ class RunTests(RunRemoteProcess):
                 try:
                     plain_matrix.add_report(f.name)
                     html_matrix.add_report(f.name, show_toc=False)
-                except:
+                except Exception:
                     self.log(traceback.format_exc())
-                    self.state = 'failed'
-                    return super().mail_body()
+                    return 'failed'
 
-                html_summary = html_matrix.summary()
-                html_details = (Path(d) / (f.name + '.html')).read_text()
+                self.plain_summary = plain_matrix.summary()
+                self.html_summary = html_matrix.summary()
+                self.html_details = (Path(d) / (f.name + '.html')).read_text()
 
-        style_start = html_summary.index('<style type="text/css">')
-        style_end = html_summary.index('</style>') + len('</style>')
+        return 'finished' if plain_matrix.report_stats[CaseResult.FAILED] == 0 else 'failed'
 
-        style = html_summary[style_start:style_end]
+    def mail_body(self):
+        if self.state != 'finished':
+            return super().mail_body()
+
+
+
+        style_start = self.html_summary.index('<style type="text/css">')
+        style_end = self.html_summary.index('</style>') + len('</style>')
+
+        style = self.html_summary[style_start:style_end]
 
         # limit this style to only apply in the junit div
         style = re.sub(r"^(.* )\{$", r"div.junit \1{", style, flags=re.MULTILINE)
         style = style.replace(",", ", div.junit ")
 
-        table_start = html_summary.index('<table class="mx-table">')
-        table_end = html_summary.rindex('</table>') + len('</table>')
+        table_start = self.html_summary.index('<table class="mx-table">')
+        table_end = self.html_summary.rindex('</table>') + len('</table>')
 
-        details_start = html_details.index('</h1>') + len('</h1>')
-        details_end = html_details.index('<p class="footer">')
-        html_details = html_details[details_start:details_end]
+        details_start = self.html_details.index('</h1>') + len('</h1>')
+        details_end = self.html_details.index('<p class="footer">')
+        self.html_details = self.html_details[details_start:details_end]
 
-        table = f'<div class="junit">{html_summary[table_start:table_end]} <details><summary>Test results</summary>{html_details}</details></div>'
+        table = f'<div class="junit">{self.html_summary[table_start:table_end]} <details><summary>Test results</summary>{self.html_details}</details></div>'
 
         table = re.sub(r'href="[^#]*', 'href="', table)
 
         plain, _style, _html = super().mail_body()
-        plain += "\n" + indent(plain_matrix.summary(), "    ")
+        plain += "\n" + indent(self.plain_summary, "    ")
 
         return plain, ('run_tests', style), super()._mail_body_html_details(table)
 
