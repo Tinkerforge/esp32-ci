@@ -22,11 +22,14 @@ Install instructions (assuming Debian >= 13.6)
 - run esp32-ci.py --workspace /path/to/workspace
   or copy esp32-ci.service to /etc/systemd/system and run
   systemctl daemon-reload && systemctl enable esp32-ci.service
+
 - on each testbox
     - if ESP is warp2-AbCd, set Pi's hostname to warp2-AbCd-pi
+    - set password to the one in vaultwarden
     - install raspbian lite 64 bit
     - sudo apt update && sudo apt upgrade
     - install uv
+    - install brickd
 - for each testbox
     - make sure this machine can ssh into the testbox (ssh-copy-id pi@testbox-host)
 - on each testbox
