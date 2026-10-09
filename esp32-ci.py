@@ -623,8 +623,9 @@ class RunTests(RunRemoteProcess):
         with TemporaryDirectory() as d:
             html_matrix = HtmlReportMatrix(d)
 
-            with NamedTemporaryFile(dir=d) as f:
+            with NamedTemporaryFile(dir=d, delete_on_close=False) as f:
                 f.write(self.stdout)
+                f.close()
                 try:
                     plain_matrix.add_report(f.name)
                     html_matrix.add_report(f.name, show_toc=False)
