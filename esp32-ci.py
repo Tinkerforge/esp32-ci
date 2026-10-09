@@ -596,9 +596,7 @@ class RunTests(RunRemoteProcess):
     _: KW_ONLY
 
     esp_host: str
-    module_under_test: str = '*'
-    suite: str = '*'
-    test: str = '*'
+    test_filter: str = ''
 
     timeout: float = -1
     name: str = "Run tests"
@@ -616,7 +614,7 @@ class RunTests(RunRemoteProcess):
             "-q",
             f"{self.user}@{self.host}",
             "-t",
-            f"bash -lc \"cd tf/esp32-firmware/software; test_runner/test_runner.py \'{self.module_under_test}/{self.suite}/{self.test}\' --host {self.esp_host} --brickd localhost --junit-xml\""
+            f"bash -lc \"cd tf/esp32-firmware/software; test_runner/test_runner.py \'{self.test_filter}\' --host {self.esp_host} --brickd localhost --junit-xml\""
         ]
 
     def _on_finished(self):
@@ -1108,9 +1106,6 @@ def build_pipeline(m: 'Main'):
                 host=pi_host).then(lambda _:
             RunTests(m, name_prefix=e.name,
                 esp_host=esp_host,
-                module_under_test='test_runner',
-                suite='*',
-                test='*',
                 user=pi_user,
                 host=pi_host)
             ))))
