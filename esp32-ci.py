@@ -34,6 +34,18 @@ Install instructions (assuming Debian >= 13.6)
     - make sure this machine can ssh into the testbox (ssh-copy-id pi@testbox-host)
 - on each testbox
     - enable ram overlay
+- if testbox for environment with secure boot and flash encryption:
+    - add zzz_overrides in workspace, symlink into esp32-firmware/software
+    - add entry such as
+        [env:warp4]
+        board_build.partitions = default_16MB_encrypted.csv
+        custom_fast_flash = off
+        upload_protocol = custom
+        upload_command = esptool --port $UPLOAD_PORT --baud $UPLOAD_SPEED write-flash 0x1000 build_latest/warp4*_esptool_secure_*.bin
+        # Expected format of the custom_secure_boot setting: "<UID/name>,<efuses block3>,<factory MAC>,<optional non-derived flash encryption key (efuses block1)>"
+        # Example:
+        custom_secure_boot = "8555,0000123456789abcdef0123456789abcdef012345678ab00cdef012345678900,a8:03:2a:12:34:56"
+    - non-derived flash encryption is is necessary if esp32/secure_device was called with "deterministic": false while provisioning the ESP. This is the common case!
 """
 
 """
@@ -1111,6 +1123,14 @@ def build_pipeline(m: 'Main'):
 
         return None
 
+    def artifacts_to_firmware(artifacts: list[Path], esp_host: str):
+        try:
+            return next(f for f in artifacts if "_esptool_secure_" in str(f) and str(f).endswith(".bin"))
+        except StopIteration:
+            pass
+
+        return next(f for f in artifacts if str(f).endswith("_merged.bin"))
+
     def env_pipeline(e: Environment):
         esp_host = env_to_testbox(e, m.config)
         if esp_host is None:
@@ -1132,7 +1152,7 @@ def build_pipeline(m: 'Main'):
                 user=pi_user,
                 host=pi_host).then(lambda _:
             UploadFirmware(m, name_prefix=e.name,
-                file=next(f for f in compile_firmware.artifacts if str(f).endswith("_merged.bin")),
+                file=artifacts_to_firmware(compile_firmware.artifacts, esp_host),
                 user=pi_user,
                 host=pi_host).then(lambda _:
             FlashFirmware(m, name_prefix=e.name,
