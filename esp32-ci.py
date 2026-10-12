@@ -1088,8 +1088,18 @@ class SendEmail(Task):
 
 
 def env_to_testbox(e: Environment, config: Config):
-    env_prefix = re.split(r"[^A-Za-z0-9]", e.name)[0]
-    env_prefix = config.env_prefix_overrides.get(env_prefix, env_prefix)
+    env_name = e.name
+
+    # Longest replacement prefix first:
+    # Fixes replacing energy_manager_v2 with wem.
+    for k in sorted(config.env_prefix_overrides.keys(), key=lambda x: len(x), reverse=True):
+        v = config.env_prefix_overrides[k]
+
+        if env_name.startswith(k):
+            env_name = v + env_name.removeprefix(k)
+            break
+
+    env_prefix = re.split(r"[^A-Za-z0-9]", env_name)[0]
 
     for t in config.testboxes:
         # This way of matching is a bit strange,
