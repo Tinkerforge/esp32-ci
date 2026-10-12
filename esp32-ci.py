@@ -665,12 +665,31 @@ class RunTests(RunRemoteProcess):
 
         table_start = self.html_summary.index('<table class="mx-table">')
         table_end = self.html_summary.rindex('</table>') + len('</table>')
+        table = self.html_summary[table_start:table_end]
+
+        # Inject checkboxes to show/hide by result type
+        # Also add script that hides passed tests by default.
+        for result in ['passed', 'failed', 'skipped']:
+            table = table.replace(
+                f'<th class="{result}">{result.title()}</th>',
+                dedent(f'''\
+                <td>
+                    <input
+                        type="checkbox"
+                        {'checked=""' if result != 'passed' else ''}
+                        onchange="document.querySelectorAll(\'tr:has(td.mx-res-{result})\').forEach(x => x.hidden = !event.target.checked)"
+                    >
+                </td>
+                <th class="{result}">{result.title()}</th>''')
+            )
+        style += "<script>window.addEventListener(\"load\", (event) => document.querySelectorAll('tr:has(td.mx-res-passed)').forEach(x => x.hidden = true));</script>"
+
 
         details_start = self.html_details.index('</h1>') + len('</h1>')
         details_end = self.html_details.index('<p class="footer">')
         details = self.html_details[details_start:details_end]
 
-        table = f'<div class="junit">{self.html_summary[table_start:table_end]} <details><summary>Test results</summary>{details}</details></div>'
+        table = f'<div class="junit">{table} <details><summary>Test results</summary>{details}</details></div>'
 
         table = re.sub(r'href="[^#]*', 'href="', table)
 
