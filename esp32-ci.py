@@ -79,6 +79,7 @@ import io
 import traceback
 import html
 from tempfile import NamedTemporaryFile, TemporaryDirectory
+import signal
 
 from flask import Flask, Response
 import git
