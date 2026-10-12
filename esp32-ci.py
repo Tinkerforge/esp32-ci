@@ -589,7 +589,7 @@ class UploadFirmware(RunRemoteProcess):
 class FlashFirmware(RunRemoteProcess):
     _: KW_ONLY
 
-    timeout: float = 60
+    timeout: float = 120
     name: str = "Flash firmware"
     working_dir: Path = Path(".")
     cmd: list[str] = field(init=False)
