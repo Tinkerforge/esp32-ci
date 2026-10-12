@@ -1087,30 +1087,30 @@ class SendEmail(Task):
         return 'finished'
 
 
-def env_to_testbox(e: Environment, config: Config):
-    env_name = e.name
-
-    # Longest replacement prefix first:
-    # Fixes replacing energy_manager_v2 with wem.
-    for k in sorted(config.env_prefix_overrides.keys(), key=lambda x: len(x), reverse=True):
-        v = config.env_prefix_overrides[k]
-
-        if env_name.startswith(k):
-            env_name = v + env_name.removeprefix(k)
-            break
-
-    env_prefix = re.split(r"[^A-Za-z0-9]", env_name)[0]
-
-    for t in config.testboxes:
-        # This way of matching is a bit strange,
-        # but prevents using warp2 testboxes for warp firmwares.
-        if re.match(rf"^{re.escape(env_prefix)}[^A-Za-z0-9]", t):
-            return t
-
-    return None
-
 
 def build_pipeline(m: 'Main'):
+    def env_to_testbox(e: Environment, config: Config):
+        env_name = e.name
+
+        # Longest replacement prefix first:
+        # Fixes replacing energy_manager_v2 with wem.
+        for k in sorted(config.env_prefix_overrides.keys(), key=lambda x: len(x), reverse=True):
+            v = config.env_prefix_overrides[k]
+
+            if env_name.startswith(k):
+                env_name = v + env_name.removeprefix(k)
+                break
+
+        env_prefix = re.split(r"[^A-Za-z0-9]", env_name)[0]
+
+        for t in config.testboxes:
+            # This way of matching is a bit strange,
+            # but prevents using warp2 testboxes for warp firmwares.
+            if re.match(rf"^{re.escape(env_prefix)}[^A-Za-z0-9]", t):
+                return t
+
+        return None
+
     def env_pipeline(e: Environment):
         esp_host = env_to_testbox(e, m.config)
         if esp_host is None:
