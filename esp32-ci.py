@@ -149,6 +149,9 @@ class Config:
     # If true, does not send mails but writes .eml files to /tmp/
     smtp_debug: bool = True
 
+    # How many tasks are allowed to run in parallel
+    task_processors: int = field(default_factory=os.cpu_count)
+
     @staticmethod
     def read(workspace_dir: Path):
         f = workspace_dir / "config.jsonc"
@@ -1191,7 +1194,7 @@ class Main:
         last_pull = 0
 
         self._task_queue: deque[Task] = deque()
-        self.current_task: Task = None
+        self.running_tasks: list[Task] = []
         self.completed_tasks: deque[Task] = deque(maxlen=100)
 
         while True:
@@ -1223,9 +1226,11 @@ class Main:
 
                     case ['abort']:
                         print('abort')
+                        for t in self.running_tasks:
+                            t.abort()
+                        self.running_tasks.clear()
+
                         self._task_queue = Queue()
-                        if self.current_task is None:
-                            self.current_task.abort()
 
                     case ['html', q_out]:
                         print('html')
@@ -1238,11 +1243,10 @@ class Main:
                         styles.update(s)
                         html += h
 
-                        html += "<h3>Current Task</h3>"
-                        if self.current_task is not None:
-                            _, s, h = format_html([self.current_task])
-                            styles.update(s)
-                            html += h
+                        html += "<h3>Running Tasks</h3>"
+                        _, s, h = format_html(reversed(self.running_tasks))
+                        styles.update(s)
+                        html += h
 
                         html += "<h3>Completed Tasks</h3>"
                         _, s, h = format_html(reversed(self.completed_tasks))
@@ -1281,28 +1285,34 @@ class Main:
             except Empty:
                 pass
 
-            # Work on current task
-            if self.current_task is not None:
-                if (task_result := self.current_task.tick()) in ['finished', 'timed_out', 'failed', 'aborted', 'skipped']:
-                    print(datetime.now().isoformat(sep=" "), self.current_task)
-                    if task_result != 'skipped' or self.current_task.keep_in_completed_when_skipped:
-                        self.completed_tasks.append(self.current_task)
-                    self.current_task = None
+            # Work on current tasks
+            for t in self.running_tasks:
+                t.tick()
+
+            done = [t for t in self.running_tasks if t.state in ['finished', 'timed_out', 'failed', 'aborted', 'skipped']]
+            self.running_tasks = [t for t in self.running_tasks if t.state not in ['finished', 'timed_out', 'failed', 'aborted', 'skipped']]
+
+            for t in done:
+                print(datetime.now().isoformat(sep=" "), t)
+                if t.state != 'skipped' or t.keep_in_completed_when_skipped:
+                    self.completed_tasks.append(t)
+
 
             # Task done? Start next task
-            if self.current_task is None and len(self._task_queue) > 0:
-                self.current_task = self._task_queue.popleft()
-                self.current_task.start()
-                print(datetime.now().isoformat(sep=" "), self.current_task)
+            if len(self.running_tasks) < self.config.task_processors and len(self._task_queue) > 0:
+                new_task = self._task_queue.popleft()
+                new_task.start()
+                print(datetime.now().isoformat(sep=" "), new_task)
+                self.running_tasks.append(new_task)
 
             # Pull every 10 minutes if nothing else to do
-            if self.current_task is None and len(self._task_queue) == 0 and time.monotonic() - last_pull > 60 * 10:
+            if len(self.running_tasks) == 0 and len(self._task_queue) == 0 and time.monotonic() - last_pull > 60 * 10:
                 print("10 minutes elapsed, fetching repos")
                 last_pull = time.monotonic()
                 self.enqueue(build_pipeline(self))
 
             # Send email if nothing else to-do and not already done.
-            if self.current_task is None and len(self._task_queue) == 0 and len(self.completed_tasks) > 0 and not isinstance(self.completed_tasks[-1], SendEmail):
+            if len(self.running_tasks) == 0 and len(self._task_queue) == 0 and len(self.completed_tasks) > 0 and not isinstance(self.completed_tasks[-1], SendEmail):
                 self.enqueue(SendEmail(self))
 
 
