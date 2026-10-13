@@ -234,26 +234,36 @@ class Task:
     def start_datestr(self) -> str:
         return self.start_datetime.isoformat(" ") if self.state != 'enqueued' else 'enqueued'
 
+    def _set_state(self, new_state: State):
+        old_state = self.state
+        self.state = new_state
+
+        if old_state == 'enqueued' and new_state == 'running':
+            self._on_started()
+        elif old_state == 'running' and new_state != 'running':
+            new_new_state = self._on_done()
+            if new_new_state is not None:
+                self.state = new_new_state
 
     def start(self):
         if self.state == 'enqueued':
             self.start_timestamp = time.monotonic()
             self.start_datetime = datetime.now().replace(microsecond=0)
             try:
-                self.state = self._verify_state(self._start())
+                self._set_state(self._verify_state(self._start()))
             except Exception as e:
                 self.log(datetime.now().isoformat(sep=' '), "Failed to start task:\n", traceback.format_exc())
-                self.state = 'failed'
+                self._set_state('failed')
 
         return self.state
 
     def abort(self):
         if self.state == 'running':
             try:
-                self.state = self._verify_state(self._abort())
+                self._set_state(self._verify_state(self._abort()))
             except Exception as e:
                 self.log(datetime.now().isoformat(sep=' '), "Failed to abort task:\n", traceback.format_exc())
-                self.state = 'failed'
+                self._set_state('failed')
 
         return self.state
 
@@ -263,17 +273,17 @@ class Task:
                 return self.abort()
 
             try:
-                self.state = self._verify_state(self._tick())
+                self._set_state(self._verify_state(self._tick()))
             except Exception as e:
                 self.log(datetime.now().isoformat(sep=' '), "Failed to tick task:\n", traceback.format_exc())
-                self.state = 'failed'
+                self._set_state('failed')
 
             if self.state == 'finished' and self._then is not None:
                 try:
                     new_tasks = self._then(self)
                 except Exception as e:
                     self.log(datetime.now().isoformat(sep=' '), "Failed to create continuation task (by calling self._then):\n", traceback.format_exc())
-                    self.state = 'failed'
+                    self._set_state('failed')
                 else:
                     if isinstance(new_tasks, Task):
                         new_tasks = [new_tasks]
@@ -299,7 +309,7 @@ class Task:
 
     # Implement/override these methods when writing a task
 
-    # Will only be called when state is 'enqueued'.
+    # Will only be called when state is 'enqueued' and self._can_start() returned True.
     # Return 'running' when start succeeded.
     # Return something else when not.
     def _start(self) -> State:
@@ -316,6 +326,28 @@ class Task:
     # Return something else when done.
     def _tick(self):
         raise NotImplementedError()
+
+    # BEGIN RESOURCE MANAGEMENT
+
+    # Return true if all resources to start are available.
+    # Don't acquire them yet!
+    def _can_start(self):
+        return True
+
+    # Called after self.state transitioned from 'enqueued' to 'running'.
+    # Acquire resources here.
+    # This is not called if _start returned something else than 'running', i.e. when the start failed.
+    def _on_started(self):
+        pass
+
+    # Called after self.state transitioned from 'running' to some other state
+    # Release resources here.
+    # This is not called if _start returned something else than 'running', i.e. when the start failed.
+    # Return new state for example if post-processing fails. Return None (= omit return) to leave state as-is.
+    def _on_done(self) -> State | None:
+        pass
+
+    # END RESOURCE MANAGEMENT
 
     # Return something short.
     # Subject is "ESP32 CI broken! [task.mail_subject() for task in failed]"
@@ -424,20 +456,25 @@ class RunProcess(Task):
 
             return 'running'
 
-        # process finished
-        self._finish()
-
-        return self._on_finished()
+        # process done
+        return 'finished' if self.proc.returncode == 0 else 'failed'
 
     def _abort(self):
         if self.proc.returncode is None:
             self.log(f"{datetime.now().isoformat()} Aborting process")
             os.killpg(os.getpgid(self.proc.pid), signal.SIGKILL)
             self._communicate()
-        self._finish()
 
         return 'aborted'
 
+    def _on_done(self):
+        self.log(f"{datetime.now().isoformat()} Process finished with return code {self.proc.returncode}: Output:")
+        self.log(self.stdout.decode('utf-8'))
+        if not self.redirect_stderr_to_stdout:
+            self.log("\n Stderr:" + self.stderr.decode('utf-8'))
+        self.log("=========== End Output ===========")
+
+        self.log(f"{datetime.now().isoformat()} Process finished with return code {self.proc.returncode}")
 
     def _communicate(self):
         output = self.proc.stdout.read()
@@ -448,16 +485,6 @@ class RunProcess(Task):
             output = self.proc.stderr.read()
             if output is not None:
                 self.stderr += output
-
-    def _finish(self):
-        self.log(f"{datetime.now().isoformat()} Process finished with return code {self.proc.returncode}: Output:")
-        self.log(self.stdout.decode('utf-8'))
-        if not self.redirect_stderr_to_stdout:
-            self.log("\n Stderr:" + self.stderr.decode('utf-8'))
-        self.log("=========== End Output ===========")
-
-    def _on_finished(self):
-        return 'finished' if self.proc.returncode == 0 else 'failed'
 
 
     def mail_subject(self):
@@ -522,14 +549,10 @@ class CompileFirmware(RunProcess):
         if self.env.pass_env:
             self.cmd += ["-e", self.env.name]
 
-    def _tick(self):
-        result = super()._tick()
-
-        if result == 'finished':
+    def _on_done(self):
+        if self.state == 'finished':
             self.artifacts = [f.resolve(strict=True) for f in (self.working_dir / "build").glob("firmware_latest*")]
             self.log("Produced artifacts", ", ".join(str(x) for x in self.artifacts))
-
-        return result
 
 
 @dataclass
@@ -639,9 +662,9 @@ class RunTests(RunRemoteProcess):
             f"bash -lc \"cd tf/esp32-firmware/software; test_runner/test_runner.py {tf} --host {self.esp_host} --brickd localhost --junit-xml\""
         ]
 
-    def _on_finished(self):
-        if self.proc.returncode != 0:
-            return 'failed'
+    def _on_done(self):
+        if self.state != 'finished':
+            return
 
         with TemporaryDirectory() as d:
             plain_matrix = TextReportMatrix()
@@ -661,7 +684,8 @@ class RunTests(RunRemoteProcess):
                 self.html_summary = html_matrix.summary()
                 self.html_details = (Path(d) / (f.name + '.html')).read_text()
 
-        return 'finished' if plain_matrix.result_stats[CaseResult.FAILED] == 0 else 'failed'
+        if plain_matrix.result_stats[CaseResult.FAILED] != 0:
+            return 'failed'
 
     def mail_body(self):
         tests_executed = self.state == 'finished' or self.state == 'failed' and self.html_details is not None
@@ -753,14 +777,15 @@ class PullRepos(Task):
         self.thread.join()
         result = self._q.get()
 
-        self.repo_heads_post = self.get_repo_heads()
-
         if result == 'restart':
             # sys.exit only raises an exception, we want to stop all threads.
             os._exit(os.EX_OK)
             return 'skipped'
 
         return result
+
+    def _on_done(self):
+        self.repo_heads_post = self.get_repo_heads()
 
     def _abort(self):
         self._stop_event.set()
