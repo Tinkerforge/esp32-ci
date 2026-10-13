@@ -406,32 +406,6 @@ class RunProcess(Task):
 
         return 'running'
 
-    def _communicate(self):
-        output = self.proc.stdout.read()
-        if output is not None:
-            self.stdout += output
-
-        if not self.redirect_stderr_to_stdout:
-            output = self.proc.stderr.read()
-            if output is not None:
-                self.stderr += output
-
-    def _finish(self):
-        self.log(f"{datetime.now().isoformat()} Process finished with return code {self.proc.returncode}: Output:")
-        self.log(self.stdout.decode('utf-8'))
-        if not self.redirect_stderr_to_stdout:
-            self.log("\n Stderr:" + self.stderr.decode('utf-8'))
-        self.log("=========== End Output ===========")
-
-    def _abort(self):
-        if self.proc.returncode is None:
-            self.log(f"{datetime.now().isoformat()} Aborting process")
-            os.killpg(os.getpgid(self.proc.pid), signal.SIGKILL)
-            self._communicate()
-        self._finish()
-
-        return 'aborted'
-
     def _tick(self):
         self._communicate()
 
@@ -454,6 +428,33 @@ class RunProcess(Task):
         self._finish()
 
         return self._on_finished()
+
+    def _abort(self):
+        if self.proc.returncode is None:
+            self.log(f"{datetime.now().isoformat()} Aborting process")
+            os.killpg(os.getpgid(self.proc.pid), signal.SIGKILL)
+            self._communicate()
+        self._finish()
+
+        return 'aborted'
+
+
+    def _communicate(self):
+        output = self.proc.stdout.read()
+        if output is not None:
+            self.stdout += output
+
+        if not self.redirect_stderr_to_stdout:
+            output = self.proc.stderr.read()
+            if output is not None:
+                self.stderr += output
+
+    def _finish(self):
+        self.log(f"{datetime.now().isoformat()} Process finished with return code {self.proc.returncode}: Output:")
+        self.log(self.stdout.decode('utf-8'))
+        if not self.redirect_stderr_to_stdout:
+            self.log("\n Stderr:" + self.stderr.decode('utf-8'))
+        self.log("=========== End Output ===========")
 
     def _on_finished(self):
         return 'finished' if self.proc.returncode == 0 else 'failed'
