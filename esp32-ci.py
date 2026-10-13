@@ -1012,6 +1012,9 @@ class SendEmail(Task):
     timeout: float = -1
 
     def _start(self):
+        return 'running'
+
+    def _tick(self):
         last_fixed_sent = -1
         for i, task in enumerate(self.m.completed_tasks):
             if isinstance(task, SendEmail) and (task.state == 'skipped' or (task.state == 'finished' and task.sent_ci_fixed)):
@@ -1025,11 +1028,6 @@ class SendEmail(Task):
                 last_sent = i
 
         self.log(f"{last_sent=}")
-
-        # last_fixed_sent != last_sent -> es war schon kaputt, schicke in jedem fall: alles seit last_fixed_sent (optional alles seit last_sent falls alles seit last_sent okay ist)
-        #     neuer zustand ist fixed wenn alles seit last_sent okay ist, sonst (weiterhin) broken
-        # last_fixed_sent == last_sent -> es war alles okay, schicke nur wenn jetzt kaputt alles seit last_sent/last_fixed_sent
-        #     neuer zustand ist fixed wenn alles seit last_sent okay ist, sonst broken
 
         def task_succeeded(t: Task):
             # TODO: is 'aborted' a failure or a success?
@@ -1094,9 +1092,6 @@ class SendEmail(Task):
             smtp.login(self.m.config.smtp_user, self.m.config.smtp_pass)
             smtp.send_message(msg)
 
-        return 'finished'
-
-    def _tick(self):
         return 'finished'
 
 
