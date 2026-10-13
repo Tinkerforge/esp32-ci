@@ -468,13 +468,18 @@ class RunProcess(Task):
         return 'aborted'
 
     def _on_done(self):
-        self.log(f"{datetime.now().isoformat()} Process finished with return code {self.proc.returncode}: Output:")
-        self.log(self.stdout.decode('utf-8'))
-        if not self.redirect_stderr_to_stdout:
-            self.log("\n Stderr:" + self.stderr.decode('utf-8'))
-        self.log("=========== End Output ===========")
+        if self.redirect_stderr_to_stdout:
+            self.log("=========== Begin Output ===========")
+            self.log(self.stdout.decode('utf-8'))
+            self.log("===========  End Output  ===========")
+        else:
+            self.log("=========== Begin stdout ===========")
+            self.log(self.stdout.decode('utf-8'))
+            self.log("============ End stdout ============")
+            self.log("=========== Begin stderr ===========")
+            self.log(self.stderr.decode('utf-8'))
+            self.log("============ End stderr ============")
 
-        self.log(f"{datetime.now().isoformat()} Process finished with return code {self.proc.returncode}")
 
     def _communicate(self):
         output = self.proc.stdout.read()
