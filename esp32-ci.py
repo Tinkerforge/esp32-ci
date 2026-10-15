@@ -650,7 +650,7 @@ class CompileFirmware(RunProcess):
         self.env_vars = os.environ | {
             "PLATFORMIO_WORKSPACE_DIR": f".pio{self.env.name}",
             "PLATFORMIO_CORE_DIR": str(self.m.workspace / ".platformio"),
-            "PLATFORMIO_FORCE_ANSI": "false",
+            "PLATFORMIO_FORCE_ANSI": "true",
             "PLATFORMIO_DISABLE_PROGRESSBAR": "true"
         }
 
