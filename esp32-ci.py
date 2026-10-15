@@ -1354,11 +1354,11 @@ def build_pipeline(m: 'Main'):
             )))))
 
     if m.force_build:
+        m.force_build = False
         return \
             PullRepos(m).finally_(lambda pull_repos: [
                 env_pipeline(e) for e in pull_repos.read_ci_config()
             ])
-        m.force_build = False
 
     return \
         PullRepos(m).then(lambda pull_repos: [
@@ -1370,7 +1370,7 @@ class Main:
     def __init__(self, q: Queue, workspace: Path, force_build: bool = False):
         self.workspace = workspace.resolve(strict=True)
         self.ci_state = CIState.read(self.workspace)
-        self.force_build = True
+        self.force_build = force_build
 
         self.config = Config.read(self.workspace)
         self.resources = Resources([
@@ -1585,6 +1585,6 @@ if __name__ == '__main__':
         sys.exit(1)
 
     to_main = Queue()
-    main = Main(to_main, ws)
+    main = Main(to_main, ws, args.force_build)
 
     app.run(host='::', port=args.listen_port)
