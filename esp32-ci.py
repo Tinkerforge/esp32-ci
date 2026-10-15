@@ -633,7 +633,7 @@ class CompileFirmware(RunProcess):
     name: str = "Compile firmware"
     working_dir: Path = field(init=False)
     cmd: list[str] = field(init=False)
-    timeout: float = 3 * 60
+    timeout: float = 5 * 60
 
     # Filled when build finishes successfully
     artifacts: list[Path] = field(default_factory=list)
