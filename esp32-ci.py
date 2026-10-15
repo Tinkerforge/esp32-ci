@@ -176,6 +176,37 @@ class Environment:
 
 
 @dataclass
+class Testbox:
+    esp_host: str
+    type_: str = field(init=False)
+    pi_host: str = field(init=False)
+    pi_user: str = 'pi'
+
+    def __post_init__(self):
+        self.type_ = self.esp_host.split("-")[0]
+
+        if "." in self.esp_host:
+            esp_hostname, rest = self.esp_host.split(".", maxsplit=1)
+            rest = '.' + rest
+        else:
+            esp_hostname, rest = self.esp_host, ""
+
+        self.pi_host = f'{esp_hostname}-pi{rest}'
+
+
+@dataclass
+class Resources:
+    testboxes: list[Testbox]
+
+    compiler: int = 1
+
+    all_testbox_types: list[str] = field(init=False)
+
+    def __post_init__(self):
+        self.all_testbox_types = [t.type_ for t in self.testboxes]
+
+
+@dataclass
 class Task:
     # Back-reference to Main, use to get workspace, task_queue, etc
     m: 'Main'
@@ -188,11 +219,13 @@ class Task:
     task_number: int = field(init=False)
 
     keep_in_completed_when_skipped: bool = True
+    keep_in_completed_when_finished: bool = True
 
     # in seconds. Set to -1 to run without timeout
     timeout: float
 
-    _then: typing.Callable[[typing.Self], None] = None
+    _then: typing.Callable[[typing.Self], typing.Self | list[typing.Self]] = None
+    _finally: typing.Callable[[typing.Self], typing.Self | list[typing.Self]] = None
 
     # head SHA of each managed repo at the time the task was created
     # Initialized in __post_init__. TODO: can we call get_repo_heads as the default factory?
@@ -205,11 +238,16 @@ class Task:
         'timed_out', 'failed', 'aborted'  # all count als failure
     ]
 
+    __on_started_fns: list[typing.Callable[[typing.Self], None]] = field(default_factory=list)
+    __on_done_fns: list[typing.Callable[[typing.Self], State | None]] = field(default_factory=list)
+
     # Set when start is called
     start_timestamp: float = None
     start_datetime: datetime = None
     state: State = 'enqueued'
     _log: io.StringIO = field(default_factory=io.StringIO)
+
+    __post_init_called: bool = False
 
     def __post_init__(self):
         if self.name_prefix != "":
@@ -218,6 +256,8 @@ class Task:
         self.repo_heads = self.get_repo_heads()
         self.task_number = self.m.next_task_number()
 
+        self.__post_init_called = True
+
     # Called just before this task's tick function will return 'finished' for the first time.
     # This task is passed as parameter as if then is a member function.
     # Return a task or list of tasks to run after this task is finished.
@@ -225,8 +265,20 @@ class Task:
         self._then = fn
         return self
 
+    # Called just before this task's tick function will return something else than 'running' for the first time.
+    # This task is passed as parameter as if then is a member function.
+    # Return a task or list of tasks to run after this task is done.
+    # If tick returned 'finished' and 'then' was called on this task, the then-tasks are created first
+    # and finally_ is called on them.
+    # In other words: A task with then-tasks does not execute finally-tasks if it finishes, the finally-tasks are
+    # pushed to the then-tasks instead.
+    # A task without then-tasks or one that did not finish successfully, will execute finally-tasks.
+    def finally_(self, fn: typing.Callable[[typing.Self], typing.Self | list[typing.Self]]) -> typing.Self:
+        self._finally = fn
+        return self
+
     @staticmethod
-    def _verify_state(x):
+    def __verify_state(x):
         if x not in typing.get_args(Task.State):
             raise Exception(f"Unknown state {repr(x)}")
         return x
@@ -234,62 +286,112 @@ class Task:
     def start_datestr(self) -> str:
         return self.start_datetime.isoformat(" ") if self.state != 'enqueued' else 'enqueued'
 
-    def _set_state(self, new_state: State):
+    def __set_state(self, new_state: State):
+        if new_state == self.state:
+            return
+
         old_state = self.state
         self.state = new_state
 
         if old_state == 'enqueued' and new_state == 'running':
-            self._on_started()
-        elif old_state == 'running' and new_state != 'running':
-            new_new_state = self._on_done()
-            if new_new_state is not None:
-                self.state = new_new_state
+            for fn in self.__on_started_fns:
+                fn(self, self.m.resources)
+            return
+
+        if old_state != 'running':
+            return
+
+        for fn in self.__on_done_fns:
+            new_state = fn(self, self.m.resources)
+
+            if new_state is not None:
+                self.state = self.__verify_state(new_state)
+                if new_state != 'finished':
+                    break
+
+        new_tasks = []
+
+        # then-tasks are only enqueued when this task succeeded
+        if self._then is not None and self.state == 'finished':
+            try:
+                new_tasks = self._then(self)
+            except Exception as e:
+                self.log(datetime.now().isoformat(sep=' '), "Failed to create continuation tasks (by calling self._then):\n", traceback.format_exc())
+                self.state = 'failed'
+
+            if isinstance(new_tasks, Task):
+                new_tasks = [new_tasks]
+
+        # finally-tasks are either chained to the then tasks created above,
+        # or are enqueued now if this task failed or there are no then-tasks
+        if self._finally is not None:
+            if len(new_tasks) > 0:
+                for t in new_tasks:
+                    if t._finally is not None:
+                        raise Exception("More than one finally not supported yet!")
+                    t.finally_(self._finally)
+            else:
+                try:
+                    new_tasks = self._finally(self)
+                except Exception as e:
+                    self.log(datetime.now().isoformat(sep=' '), "Failed to create continuation tasks (by calling self._finally):\n", traceback.format_exc())
+                    self.state = 'failed'
+
+                if isinstance(new_tasks, Task):
+                    new_tasks = [new_tasks]
+
+        for t in new_tasks:
+            self.m.enqueue(t)
+
+    def can_start(self, resources: Resources):
+        if not self.__post_init_called:
+            self.log("Task.__post_init__ was not called. Was this function overwritten without a super().__post_init__() call?")
+            new_state = 'failed'
+
+        return self._can_start(resources)
 
     def start(self):
+        new_state = self.state
+
         if self.state == 'enqueued':
             self.start_timestamp = time.monotonic()
             self.start_datetime = datetime.now().replace(microsecond=0)
             try:
-                self._set_state(self._verify_state(self._start()))
+                new_state = self.__verify_state(self._start())
             except Exception as e:
                 self.log(datetime.now().isoformat(sep=' '), "Failed to start task:\n", traceback.format_exc())
-                self._set_state('failed')
+                new_state = 'failed'
 
+        self.__set_state(new_state)
         return self.state
 
     def abort(self):
+        new_state = self.state
+
         if self.state == 'running':
             try:
-                self._set_state(self._verify_state(self._abort()))
+                new_state = self.__verify_state(self._abort())
             except Exception as e:
                 self.log(datetime.now().isoformat(sep=' '), "Failed to abort task:\n", traceback.format_exc())
-                self._set_state('failed')
+                new_state = 'failed'
 
+        self.__set_state(new_state)
         return self.state
 
     def tick(self):
+        new_state = self.state
+
         if self.state == 'running':
             if self.timeout > -1 and time.monotonic() - self.start_timestamp > self.timeout:
                 return self.abort()
 
             try:
-                self._set_state(self._verify_state(self._tick()))
+                new_state = self.__verify_state(self._tick())
             except Exception as e:
                 self.log(datetime.now().isoformat(sep=' '), "Failed to tick task:\n", traceback.format_exc())
-                self._set_state('failed')
+                new_state = 'failed'
 
-            if self.state == 'finished' and self._then is not None:
-                try:
-                    new_tasks = self._then(self)
-                except Exception as e:
-                    self.log(datetime.now().isoformat(sep=' '), "Failed to create continuation task (by calling self._then):\n", traceback.format_exc())
-                    self._set_state('failed')
-                else:
-                    if isinstance(new_tasks, Task):
-                        new_tasks = [new_tasks]
-                    for t in new_tasks:
-                        self.m.enqueue(t)
-
+        self.__set_state(new_state)
         return self.state
 
     def log(self, *args, **kwargs):
@@ -313,46 +415,44 @@ class Task:
     # Return 'running' when start succeeded.
     # Return something else when not.
     def _start(self) -> State:
-        raise NotImplementedError()
+        return 'running'
 
     # Will only be called when state is 'running'.
     # Return 'aborted' when abort succedded.
     # Return something else when not.
     def _abort(self) -> State:
-        raise NotImplementedError()
+        return 'aborted'
 
     # Will only be called when state is 'running'.
     # Return 'running' when not done.
     # Return something else when done.
     def _tick(self):
-        raise NotImplementedError()
-
-    # BEGIN RESOURCE MANAGEMENT
-
-    # Return true if all resources to start are available.
-    # Don't acquire them yet!
-    def _can_start(self):
-        return True
+        return 'finished'
 
     # Called after self.state transitioned from 'enqueued' to 'running'.
     # Acquire resources here.
     # This is not called if _start returned something else than 'running', i.e. when the start failed.
-    def _on_started(self):
-        pass
+    def on_started(self, fn: typing.Callable[[typing.Self, Resources], None]):
+        self.__on_started_fns.append(fn)
 
     # Called after self.state transitioned from 'running' to some other state
     # Release resources here.
     # This is not called if _start returned something else than 'running', i.e. when the start failed.
     # Return new state for example if post-processing fails. Return None (= omit return) to leave state as-is.
-    def _on_done(self) -> State | None:
-        pass
+    def on_done(self, fn: typing.Callable[[typing.Self, Resources], State | None]):
+        self.__on_done_fns.append(fn)
+
+    # BEGIN RESOURCE MANAGEMENT
+
+    # Return true if all resources to start are available.
+    # Don't acquire them yet!
+    def _can_start(self, resources: Resources):
+        return True
 
     # END RESOURCE MANAGEMENT
 
-    # Return something short.
-    # Subject is "ESP32 CI broken! [task.mail_subject() for task in failed]"
     def mail_subject(self):
-        raise NotImplementedError()
+        return f"{self.name}"
 
     # Return plain text and HTML version
     def mail_body(self) -> (str, (str, str), str):
@@ -412,6 +512,11 @@ class RunProcess(Task):
     stdout: bytes | str = bytes()
     stderr: bytes | str = bytes()
 
+    def __post_init__(self):
+        super().__post_init__()
+
+        self.on_done(lambda self, resources: self._log_output())
+
     def _start(self):
         with tfutil.ChangedDirectory(self.working_dir):
             self.log(f"{datetime.now().isoformat()} Starting {self.name} ({self.cmd if isinstance(self.cmd, str) else ' '.join(self.cmd)}) in {self.working_dir.resolve(strict=True)}")
@@ -467,7 +572,7 @@ class RunProcess(Task):
 
         return 'aborted'
 
-    def _on_done(self):
+    def _log_output(self):
         if self.redirect_stderr_to_stdout:
             self.log("=========== Begin Output ===========")
             self.log(self.stdout.decode('utf-8'))
@@ -491,9 +596,6 @@ class RunProcess(Task):
             if output is not None:
                 self.stderr += output
 
-
-    def mail_subject(self):
-        return f"{self.name}"
 
     def _mail_body_html_details(self, content):
         return dedent(f"""\
@@ -536,6 +638,10 @@ class CompileFirmware(RunProcess):
     # Filled when build finishes successfully
     artifacts: list[Path] = field(default_factory=list)
 
+    redirect_stderr_to_stdout: bool = False
+
+    compilers_acquired: int = 0
+
     def __post_init__(self):
         super().__post_init__()
 
@@ -544,7 +650,8 @@ class CompileFirmware(RunProcess):
         self.env_vars = os.environ | {
             "PLATFORMIO_WORKSPACE_DIR": f".pio{self.env.name}",
             "PLATFORMIO_CORE_DIR": str(self.m.workspace / ".platformio"),
-            "PLATFORMIO_FORCE_ANSI": "true"
+            "PLATFORMIO_FORCE_ANSI": "false",
+            "PLATFORMIO_DISABLE_PROGRESSBAR": "true"
         }
 
         if self.env.nightly:
@@ -554,23 +661,90 @@ class CompileFirmware(RunProcess):
         if self.env.pass_env:
             self.cmd += ["-e", self.env.name]
 
-    def _on_done(self):
+        self.on_started(lambda self, resources: self._acquire_compiler(resources))
+        self.on_done(lambda self, resources: self._release_compiler(resources))
+
+        self.on_done(lambda self, resources: self._collect_artifacts(resources))
+
+    def _can_start(self, resources: Resources):
+        return resources.compiler >= 1
+
+    def _acquire_compiler(self, resources: Resources):
+        resources.compiler -= 1
+        self.compilers_acquired += 1
+
+    def _release_compiler(self, resources: Resources):
+        resources.compiler += self.compilers_acquired
+        self.compilers_acquired = 0
+
+    def _communicate(self):
+        result = super()._communicate()
+
+        if self.compilers_acquired > 0 and f"Linking .pio{self.env.name}/build/{self.env.name}/firmware.elf".encode('utf-8') in self.stdout:
+            self._release_compiler(self.m.resources)
+
+        return result
+
+    def _collect_artifacts(self, resources: Resources):
         if self.state == 'finished':
             self.artifacts = [f.resolve(strict=True) for f in (self.working_dir / "build").glob("firmware_latest*")]
             self.log("Produced artifacts", ", ".join(str(x) for x in self.artifacts))
 
 
 @dataclass
-class RunRemoteProcess(RunProcess):
+class AcquireTestbox(Task):
     _: KW_ONLY
 
-    user: str
-    host: str
+    name: str = "Acquire Testbox"
+    timeout: float = 1
+    keep_in_completed_when_finished: bool = False
+
+    required_testbox_type: str
+
+    testbox: Testbox | None = None
+
+    def __post_init__(self):
+        super().__post_init__()
+        self.on_started(lambda self, resources: self._acquire(resources))
+
+    def _can_start(self, resources: Resources):
+        return any(t.type_ == self.required_testbox_type for t in resources.testboxes)
+
+    def _acquire(self, resources: Resources):
+        self.testbox = next(t for t in resources.testboxes if t.type_ == self.required_testbox_type)
+        resources.testboxes.remove(self.testbox)
+
+
+@dataclass
+class RunOnTestbox(RunProcess):
+    _: KW_ONLY
+
+    testbox: Testbox
 
 
 
 @dataclass
-class PrepareRPI(RunRemoteProcess):
+class ReleaseTestbox(Task):
+    _: KW_ONLY
+
+    name: str = "Release Testbox"
+    timeout: float = 1
+    keep_in_completed_when_finished: bool = False
+
+    testbox: Testbox
+
+    def __post_init__(self):
+        super().__post_init__()
+        self.on_done(lambda self, resources: self._release(resources))
+
+    def _release(self, resources: Resources):
+        if self.testbox is not None:
+            resources.testboxes.append(self.testbox)
+            self.testbox = None
+
+
+@dataclass
+class PrepareRPI(RunOnTestbox):
     _: KW_ONLY
 
     esp32_master_repo: Path
@@ -579,10 +753,11 @@ class PrepareRPI(RunRemoteProcess):
     name: str = "Prepare Raspberry Pi"
     working_dir: Path = Path(".")
     cmd: list[str] = field(init=False)
+    keep_in_completed_when_finished: bool = False
 
     def __post_init__(self):
         super().__post_init__()
-        self.cmd = f'git archive HEAD . | ssh {self.user}@{self.host} '\
+        self.cmd = f'git archive HEAD . | ssh {self.testbox.pi_user}@{self.testbox.pi_host} '\
             '"'\
             'mv ~/tf/esp32-firmware/software/.venv /tmp/.venv; ' \
             'rm -rf ~/tf/esp32-firmware && ' \
@@ -598,7 +773,7 @@ class PrepareRPI(RunRemoteProcess):
 
 
 @dataclass
-class UploadFirmware(RunRemoteProcess):
+class UploadFirmware(RunOnTestbox):
     _: KW_ONLY
 
     file: Path
@@ -607,41 +782,42 @@ class UploadFirmware(RunRemoteProcess):
     name: str = "Upload firmware"
     working_dir: Path = Path(".")
     cmd: list[str] = field(init=False)
+    keep_in_completed_when_finished: bool = False
 
     def __post_init__(self):
         super().__post_init__()
         self.cmd = [
             "scp",
             str(self.file.resolve(strict=True)),
-            f"{self.user}@{self.host}:/tmp/firmware.bin"
+            f"{self.testbox.pi_user}@{self.testbox.pi_host}:/tmp/firmware.bin"
         ]
 
 
 @dataclass
-class FlashFirmware(RunRemoteProcess):
+class FlashFirmware(RunOnTestbox):
     _: KW_ONLY
 
     timeout: float = 120
     name: str = "Flash firmware"
     working_dir: Path = Path(".")
     cmd: list[str] = field(init=False)
+    keep_in_completed_when_finished: bool = False
 
     def __post_init__(self):
         super().__post_init__()
         self.cmd = [
             "ssh",
-            f"{self.user}@{self.host}",
+            f"{self.testbox.pi_user}@{self.testbox.pi_host}",
             "-t",
             f"bash -lc \"cd ~/tf/esp32-firmware/software; ./ff --no-serial --port /dev/ttyUSB0 /tmp/firmware.bin\""
         ]
 
 
 @dataclass
-class RunTests(RunRemoteProcess):
+class RunTests(RunOnTestbox):
     _: KW_ONLY
 
-    esp_host: str
-    test_filter: str = ''
+    test_filter: str = 'test_runner/*/*'
 
     timeout: float = -1
     name: str = "Run tests"
@@ -662,12 +838,14 @@ class RunTests(RunRemoteProcess):
         self.cmd = [
             "ssh",
             "-q",
-            f"{self.user}@{self.host}",
+            f"{self.testbox.pi_user}@{self.testbox.pi_host}",
             "-t",
-            f"bash -lc \"cd tf/esp32-firmware/software; test_runner/test_runner.py {tf} --host {self.esp_host} --brickd localhost --junit-xml\""
+            f"bash -lc \"cd tf/esp32-firmware/software; test_runner/test_runner.py {tf} --host {self.testbox.esp_host} --brickd localhost --junit-xml\""
         ]
 
-    def _on_done(self):
+        self.on_done(lambda self, _: self._convert_to_html())
+
+    def _convert_to_html(self):
         if self.state != 'finished':
             return
 
@@ -767,6 +945,10 @@ class PullRepos(Task):
 
     repo_heads_post: dict = field(default_factory=dict)
 
+    def __post_init__(self):
+        super().__post_init__()
+        self.on_done(lambda self, _: self._update_repos_post_build())
+
     def _start(self):
         self.log(f"{datetime.now().isoformat()} Starting to pull repos")
         self._q = Queue()
@@ -789,7 +971,7 @@ class PullRepos(Task):
 
         return result
 
-    def _on_done(self):
+    def _update_repos_post_build(self):
         self.repo_heads_post = self.get_repo_heads()
 
     def _abort(self):
@@ -896,9 +1078,6 @@ class PullRepos(Task):
             envs += new_envs
 
         return envs
-
-    def mail_subject(self):
-        return 'pull repos'
 
     def mail_body(self):
         if self.state != 'finished':
@@ -1131,7 +1310,7 @@ class SendEmail(Task):
 
 
 def build_pipeline(m: 'Main'):
-    def env_to_testbox(e: Environment, config: Config):
+    def env_to_testbox_type(e: Environment, config: Config):
         env_name = e.name
 
         # Longest replacement prefix first:
@@ -1143,17 +1322,9 @@ def build_pipeline(m: 'Main'):
                 env_name = v + env_name.removeprefix(k)
                 break
 
-        env_prefix = re.split(r"[^A-Za-z0-9]", env_name)[0]
+        return re.split(r"[^A-Za-z0-9]", env_name)[0]
 
-        for t in config.testboxes:
-            # This way of matching is a bit strange,
-            # but prevents using warp2 testboxes for warp firmwares.
-            if re.match(rf"^{re.escape(env_prefix)}[^A-Za-z0-9]", t):
-                return t
-
-        return None
-
-    def artifacts_to_firmware(artifacts: list[Path], esp_host: str):
+    def artifacts_to_firmware(artifacts: list[Path]):
         try:
             return next(f for f in artifacts if "_esptool_secure_" in str(f) and str(f).endswith(".bin"))
         except StopIteration:
@@ -1162,37 +1333,32 @@ def build_pipeline(m: 'Main'):
         return next(f for f in artifacts if str(f).endswith("_merged.bin"))
 
     def env_pipeline(e: Environment):
-        esp_host = env_to_testbox(e, m.config)
-        if esp_host is None:
+        tb_type = env_to_testbox_type(e, m.config)
+
+        print(tb_type, m.resources.all_testbox_types)
+
+        if tb_type not in m.resources.all_testbox_types:
             return CompileFirmware(m, name_prefix=e.name, env=e)
-
-        if "." in esp_host:
-            esp_hostname, rest = esp_host.split(".", maxsplit=1)
-            rest = '.' + rest
-        else:
-            esp_hostname, rest = esp_host, ""
-
-        pi_host = f'{esp_hostname}-pi{rest}'
-        pi_user = 'pi'
 
         return \
             CompileFirmware(m, name_prefix=e.name, env=e).then(lambda compile_firmware:
-            PrepareRPI(m, name_prefix=e.name,
-                esp32_master_repo=e.working_dir,
-                user=pi_user,
-                host=pi_host).then(lambda _:
-            UploadFirmware(m, name_prefix=e.name,
-                file=artifacts_to_firmware(compile_firmware.artifacts, esp_host),
-                user=pi_user,
-                host=pi_host).then(lambda _:
-            FlashFirmware(m, name_prefix=e.name,
-                user=pi_user,
-                host=pi_host).then(lambda _:
-            RunTests(m, name_prefix=e.name,
-                esp_host=esp_host,
-                user=pi_user,
-                host=pi_host)
-            ))))
+            AcquireTestbox(m, name_prefix=e.name, required_testbox_type=tb_type)
+                .finally_(lambda at: ReleaseTestbox(m, name_prefix=e.name, testbox=at.testbox))
+                .then(lambda at:
+            PrepareRPI(m, name_prefix=e.name, testbox=at.testbox,
+                esp32_master_repo=e.working_dir).then(lambda _:
+            UploadFirmware(m, name_prefix=e.name, testbox=at.testbox,
+                file=artifacts_to_firmware(compile_firmware.artifacts)).then(lambda _:
+            FlashFirmware(m, name_prefix=e.name, testbox=at.testbox).then(lambda _:
+            RunTests(m, name_prefix=e.name, testbox=at.testbox)
+            )))))
+
+    if m.force_build:
+        return \
+            PullRepos(m).finally_(lambda pull_repos: [
+                env_pipeline(e) for e in pull_repos.read_ci_config()
+            ])
+        m.force_build = False
 
     return \
         PullRepos(m).then(lambda pull_repos: [
@@ -1201,11 +1367,15 @@ def build_pipeline(m: 'Main'):
 
 
 class Main:
-    def __init__(self, q: Queue, workspace: Path):
+    def __init__(self, q: Queue, workspace: Path, force_build: bool = False):
         self.workspace = workspace.resolve(strict=True)
         self.ci_state = CIState.read(self.workspace)
+        self.force_build = True
 
         self.config = Config.read(self.workspace)
+        self.resources = Resources([
+            Testbox(esp_host) for esp_host in self.config.testboxes
+        ])
 
         self.q = q
         self.thread = threading.Thread(target=self.main, daemon=True)
@@ -1325,16 +1495,28 @@ class Main:
 
             for t in done:
                 print(datetime.now().isoformat(sep=" "), t)
-                if t.state != 'skipped' or t.keep_in_completed_when_skipped:
-                    self.completed_tasks.append(t)
+                match t.state:
+                    case 'skipped':
+                        if t.keep_in_completed_when_skipped:
+                            self.completed_tasks.append(t)
+                    case 'finished':
+                        if t.keep_in_completed_when_finished:
+                            self.completed_tasks.append(t)
+                    case _:
+                        self.completed_tasks.append(t)
 
 
             # Task done? Start next task
             if len(self.running_tasks) < self.config.task_processors and len(self._task_queue) > 0:
-                new_task = self._task_queue.popleft()
-                new_task.start()
-                print(datetime.now().isoformat(sep=" "), new_task)
-                self.running_tasks.append(new_task)
+                for t in self._task_queue:
+                    if not t.can_start(self.resources):
+                        continue
+
+                    self._task_queue.remove(t)
+                    t.start()
+                    print(datetime.now().isoformat(sep=" "), t)
+                    self.running_tasks.append(t)
+                    break
 
             # Pull every 10 minutes if nothing else to do
             if len(self.running_tasks) == 0 and len(self._task_queue) == 0 and time.monotonic() - last_pull > 60 * 10:
@@ -1394,6 +1576,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-w', '--workspace')
     parser.add_argument('-l', '--listen-port', default=5000)
+    parser.add_argument('-f', '--force-build', action='store_true', help="Force running the build pipeline once after starting up.")
     args = parser.parse_args()
     ws = Path(args.workspace)
 
