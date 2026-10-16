@@ -924,9 +924,7 @@ class RunTests(RunOnTestbox):
         return plain, ('run_tests', style), super()._mail_body_html_details(table)
 
     def mail_add_attachments(self, msg: EmailMessage):
-        if self.state != 'finished':
-            return super().mail_add_attachments(msg)
-
+        super().mail_add_attachments(msg)
         msg.add_attachment(self.stdout, maintype="application", subtype="junit+xml", filename=f"{self.task_number}-{self.name}-junit.xml")
 
 
