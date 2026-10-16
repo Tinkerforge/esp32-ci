@@ -646,6 +646,7 @@ class CompileFirmware(RunProcess):
         super().__post_init__()
 
         self.working_dir = self.env.working_dir
+        self.pio_workspace_dir = self.working_dir / f".pio{self.env.name}"
 
         self.env_vars = os.environ | {
             "PLATFORMIO_WORKSPACE_DIR": f".pio{self.env.name}",
@@ -687,7 +688,7 @@ class CompileFirmware(RunProcess):
 
     def _collect_artifacts(self, resources: Resources):
         if self.state == 'finished':
-            self.artifacts = [f.resolve(strict=True) for f in (self.working_dir / "build").glob("firmware_latest*")]
+            self.artifacts = [f.resolve(strict=True) for f in (self.pio_workspace_dir / f"build/{self.env.name}").glob("firmware*")]
             self.log("Produced artifacts", ", ".join(str(x) for x in self.artifacts))
 
 
