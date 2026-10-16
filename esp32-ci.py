@@ -965,7 +965,7 @@ class PullRepos(Task):
         result = self._q.get()
 
         if result == 'restart':
-            subprocess.run(['/usr/bin/systemctl', 'reset-failed' 'esp32-ci.service'])
+            subprocess.run(['/usr/bin/systemctl', 'reset-failed', 'esp32-ci.service'])
             # sys.exit only raises an exception, we want to stop all threads.
             os._exit(os.EX_OK)
             return 'skipped'
