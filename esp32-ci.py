@@ -917,7 +917,7 @@ class RunTests(RunOnTestbox):
 
         table = f'<div class="junit">{table} <details><summary>Test results</summary>{details}</details></div>'
 
-        table = re.sub(r'href="[^#]*', 'href="', table)
+        table = re.sub(r'(href=")([^"]*)(")', lambda match: f"{match.group(1)}#{"".join(match.group(2).rsplit('#')[-1])}{match.group(3)}", table)
 
         plain, _style, _html = super().mail_body()
         plain += "\n" + indent(self.plain_summary, "    ")
