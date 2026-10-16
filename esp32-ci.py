@@ -817,7 +817,7 @@ class FlashFirmware(RunOnTestbox):
 class RunTests(RunOnTestbox):
     _: KW_ONLY
 
-    test_filter: str = '*/*/*'
+    test_filter: str = ''
 
     timeout: float = -1
     name: str = "Run tests"
