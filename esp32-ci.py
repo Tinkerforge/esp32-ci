@@ -809,7 +809,7 @@ class FlashFirmware(RunOnTestbox):
             "ssh",
             f"{self.testbox.pi_user}@{self.testbox.pi_host}",
             "-t",
-            f"bash -lc \"cd ~/tf/esp32-firmware/software; ./ff --no-serial --port /dev/ttyUSB0 /tmp/firmware.bin\""
+            f"bash -lc \"cd ~/tf/esp32-firmware/software; ./ff --no-serial --port /dev/ttyUSB0 /tmp/firmware.bin --factory-reset --exit-on-network-connected\""
         ]
 
 
