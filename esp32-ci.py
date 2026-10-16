@@ -1200,6 +1200,9 @@ def format_html(tasks: list[Task]) -> (str, str, str):
                     display: block;
                     width: fit-content;
                 }
+                .task-hidden {
+                    display: none
+                }
             </style>""")
     }
 
@@ -1208,6 +1211,11 @@ def format_html(tasks: list[Task]) -> (str, str, str):
 
     for t in tasks:
         p, s, h = t.mail_body()
+
+        if (t.state == 'skipped' and not t.keep_in_completed_when_skipped) or \
+           (t.state == 'finished' and not t.keep_in_completed_when_finished):
+            h = f'<div class="task-hidden">{h}</div>'
+
         styles[s[0]] = s[1]
         plain += "\n" + p
         html += "\n" + h
@@ -1397,7 +1405,7 @@ class Main:
 
         self._task_queue: deque[Task] = deque()
         self.running_tasks: list[Task] = []
-        self.completed_tasks: deque[Task] = deque(maxlen=100)
+        self.completed_tasks: deque[Task] = deque(maxlen=200)
 
         while True:
             try:
@@ -1496,16 +1504,7 @@ class Main:
 
             for t in done:
                 print(datetime.now().isoformat(sep=" "), t)
-                match t.state:
-                    case 'skipped':
-                        if t.keep_in_completed_when_skipped:
-                            self.completed_tasks.append(t)
-                    case 'finished':
-                        if t.keep_in_completed_when_finished:
-                            self.completed_tasks.append(t)
-                    case _:
-                        self.completed_tasks.append(t)
-
+                self.completed_tasks.append(t)
 
             # Task done? Start next task
             if len(self.running_tasks) < self.config.task_processors and len(self._task_queue) > 0:
