@@ -1519,15 +1519,15 @@ class Main:
                     self.running_tasks.append(t)
                     break
 
+            # Send email if nothing else to-do and not already done.
+            if len(self.running_tasks) == 0 and len(self._task_queue) == 0 and len(self.completed_tasks) > 0 and not isinstance(self.completed_tasks[-1], SendEmail):
+                self.enqueue(SendEmail(self))
+
             # Pull every 10 minutes if nothing else to do
             if len(self.running_tasks) == 0 and len(self._task_queue) == 0 and time.monotonic() - last_pull > 60 * 10:
                 print("10 minutes elapsed, fetching repos")
                 last_pull = time.monotonic()
                 self.enqueue(build_pipeline(self))
-
-            # Send email if nothing else to-do and not already done.
-            if len(self.running_tasks) == 0 and len(self._task_queue) == 0 and len(self.completed_tasks) > 0 and not isinstance(self.completed_tasks[-1], SendEmail):
-                self.enqueue(SendEmail(self))
 
 
 app = Flask(__name__, static_folder="./static")
