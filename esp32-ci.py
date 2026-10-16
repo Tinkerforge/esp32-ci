@@ -823,6 +823,7 @@ class RunTests(RunOnTestbox):
     name: str = "Run tests"
     working_dir: Path = Path(".")
     cmd: list[str] = field(init=False)
+    redirect_stderr_to_stdout: bool = False
 
     plain_summary: str = None
     html_summary: str = None
@@ -867,7 +868,7 @@ class RunTests(RunOnTestbox):
                 self.html_summary = html_matrix.summary()
                 self.html_details = (Path(d) / (f.name + '.html')).read_text()
 
-        if plain_matrix.result_stats[CaseResult.FAILED] != 0:
+        if plain_matrix.result_stats.get(CaseResult.FAILED, 0) != 0:
             return 'failed'
 
     def mail_body(self):
