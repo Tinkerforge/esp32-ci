@@ -766,6 +766,9 @@ class AcquireTestbox(Task):
 
     def __post_init__(self):
         super().__post_init__()
+
+        self.log(f"Will acquire {self.testbox.pi_host}")
+
         self.on_started(lambda self, resources: self._acquire(resources))
 
     def _can_start(self, resources: Resources):
@@ -773,6 +776,7 @@ class AcquireTestbox(Task):
 
     def _acquire(self, resources: Resources):
         self.testbox = next(t for t in resources.testboxes if t.type_ == self.required_testbox_type)
+        self.log(f"Acquired {self.testbox.pi_host}")
         resources.testboxes.remove(self.testbox)
 
 
@@ -797,11 +801,15 @@ class ReleaseTestbox(Task):
 
     def __post_init__(self):
         super().__post_init__()
+
+        self.log(f"Will release {self.testbox.pi_host}")
+
         self.on_done(lambda self, resources: self._release(resources))
 
     def _release(self, resources: Resources):
         if self.testbox is not None:
             resources.testboxes.append(self.testbox)
+            self.log(f"Released {self.testbox.pi_host}")
             self.testbox = None
 
 
