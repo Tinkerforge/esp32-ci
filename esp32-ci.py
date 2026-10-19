@@ -1582,9 +1582,12 @@ class Main:
                     self.running_tasks.append(t)
                     break
 
-            # Send email if nothing else to-do and not already done.
-            if len(self.running_tasks) == 0 and len(self._task_queue) == 0 and len(self.completed_tasks) > 0 and not isinstance(self.completed_tasks[-1], SendEmail):
-                self.enqueue(SendEmail(self))
+            if len(self.running_tasks) == 0 and len(self._task_queue) == 0:
+                # Send email if nothing else to-do and not already done.
+                if len(self.completed_tasks) > 0:
+                    last_task = self.completed_tasks[-1]
+                    if not isinstance(last_task, SendEmail) and not (isinstance(last_task, PullRepos) and last_task.state == 'skipped'):
+                        self.enqueue(SendEmail(self))
 
             # Pull every 10 minutes if nothing else to do
             if len(self.running_tasks) == 0 and len(self._task_queue) == 0 and time.monotonic() - last_pull > 60 * 10:
