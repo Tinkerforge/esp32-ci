@@ -767,7 +767,7 @@ class AcquireTestbox(Task):
     def __post_init__(self):
         super().__post_init__()
 
-        self.log(f"Will acquire testbox of type {required_testbox_type}")
+        self.log(f"Will acquire testbox of type {self.required_testbox_type}")
 
         self.on_started(lambda self, resources: self._acquire(resources))
 
