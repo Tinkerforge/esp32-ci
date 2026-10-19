@@ -732,6 +732,11 @@ class CompileFirmware(RunProcess):
         resources.compiler += self.compilers_acquired
         self.compilers_acquired = 0
 
+    def _kill_pg(self):
+        super()._kill_pg()
+        # If we kill pio in exactly the right moment, the build cache config stays locked.
+        (self.pio_workspace_dir / "build_cache" / "config.lock").unlink(missing_ok=True)
+
     def _communicate(self):
         result = super()._communicate()
 
