@@ -587,6 +587,20 @@ class RunProcess(Task):
 
         return 'running'
 
+    def _kill_pg(self):
+        if self.proc.returncode is not None:
+            return
+
+        os.killpg(os.getpgid(self.proc.pid), signal.SIGTERM)
+
+        start = time.monotonic()
+        while self.proc.returncode is None and (time.monotonic() - start) < 1:
+            self._communicate()
+            time.sleep(0.1)
+
+        os.killpg(os.getpgid(self.proc.pid), signal.SIGKILL)
+        self._communicate()
+
     def _tick(self):
         self._communicate()
 
@@ -594,8 +608,7 @@ class RunProcess(Task):
             # process still running
             if self.timeout > -1 and time.monotonic() - self.start_timestamp > self.timeout:
                 self.log(f"{datetime.now().isoformat()} Process timed out; aborting")
-                os.killpg(os.getpgid(self.proc.pid), signal.SIGKILL)
-                self._communicate()
+                self._kill_pg()
                 return 'timed_out'
 
             try:
@@ -609,10 +622,7 @@ class RunProcess(Task):
         return 'finished' if self.proc.returncode == 0 else 'failed'
 
     def _abort(self):
-        if self.proc.returncode is None:
-            self.log(f"{datetime.now().isoformat()} Aborting process")
-            os.killpg(os.getpgid(self.proc.pid), signal.SIGKILL)
-            self._communicate()
+        self._kill_pg()
 
         return 'aborted'
 
