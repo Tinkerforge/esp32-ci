@@ -80,8 +80,9 @@ import traceback
 import html
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 import signal
+from fnmatch import fnmatch
 
-from flask import Flask, Response
+from flask import Flask, Response, redirect, request
 import git
 import tinkerforge_util as tfutil
 from ansi2html import Ansi2HTMLConverter
@@ -1390,7 +1391,7 @@ class SendEmail(Task):
 
 
 
-def build_pipeline(m: 'Main'):
+def build_pipeline(m: 'Main', env_pattern_globs: tuple[str] = ('*',), force_build=False):
     def env_to_testbox_type(e: Environment, config: Config):
         env_name = e.name
 
@@ -1434,16 +1435,19 @@ def build_pipeline(m: 'Main'):
             RunTests(m, name_prefix=e.name, testbox=at.testbox)
             )))))
 
-    if m.force_build:
-        m.force_build = False
+    def filter_envs(envs: list[Environment]):
+        env_patterns = [p.strip() for p in env_pattern_globs]
+        return [e for e in envs if any(fnmatch(e.name, p) for p in env_patterns)]
+
+    if force_build:
         return \
             PullRepos(m).finally_(lambda pull_repos: [
-                env_pipeline(e) for e in pull_repos.read_ci_config()
+                env_pipeline(e) for e in filter_envs(pull_repos.read_ci_config())
             ])
 
     return \
         PullRepos(m).then(lambda pull_repos: [
-            env_pipeline(e) for e in pull_repos.read_ci_config()
+            env_pipeline(e) for e in filter_envs(pull_repos.read_ci_config())
         ])
 
 
@@ -1486,27 +1490,47 @@ class Main:
                         print('join')
                         return
 
-
-                    case ['abort']:
+                    case ['abort', task_patterns]:
                         print('abort')
-                        for t in self.running_tasks:
-                            t.abort()
-                        self.running_tasks.clear()
 
-                        self._task_queue = Queue()
+                        task_patterns = [p.strip() for p in task_patterns.split(",")]
+
+                        for t in self._task_queue:
+                            if not any(fnmatch(str(t.task_number), p) for p in task_patterns):
+                                continue
+
+                            t.abort()
+
+                        done = [t for t in self._task_queue if t.state != 'enqueued']
+                        for t in done:
+                            self.completed_tasks.append(t)
+                            self._task_queue.remove(t)
+
+                        for t in self.running_tasks:
+                            if not any(fnmatch(str(t.task_number), p) for p in task_patterns):
+                                continue
+
+                            t.abort()
+
+
+                    case ['build', env_patterns]:
+                        print('build', env_patterns)
+
+                        last_pull = time.monotonic()
+                        self.enqueue(build_pipeline(self, tuple(env_patterns.split(",")), force_build=True))
 
                     case ['html', q_out]:
                         print('html')
 
                         styles = {}
-                        html = ""
+                        html = '<form method="POST" action="build"><input name="env_patterns" type="text" style="width: 400px" placeholder="empty=build all; env glob patterns separated by ,"><button>Start Build</button></form>'
 
                         html += "<h3>Enqueued Tasks</h3>"
                         _, s, h = format_html(reversed(self._task_queue))
                         styles.update(s)
                         html += h
 
-                        html += "<h3>Running Tasks</h3>"
+                        html += '<h3>Running Tasks <form style="display: inline-block;" method="POST" action="abort/*"><button>Abort all</button></form></h3>'
                         _, s, h = format_html(reversed(self.running_tasks))
                         styles.update(s)
                         html += h
@@ -1566,7 +1590,8 @@ class Main:
             if len(self.running_tasks) == 0 and len(self._task_queue) == 0 and time.monotonic() - last_pull > 60 * 10:
                 print("10 minutes elapsed, fetching repos")
                 last_pull = time.monotonic()
-                self.enqueue(build_pipeline(self))
+                self.enqueue(build_pipeline(self, force_build=self.force_build))
+                self.force_build = False
 
 
 app = Flask(__name__, static_folder="./static")
@@ -1578,6 +1603,20 @@ def index():
     to_main.put(['html', from_main])
     return Response(from_main.get(), "text/html")
 
+
+@app.route("/build", methods=['POST'])
+def build():
+    p = request.form['env_patterns']
+    if len(p) == 0:
+        p = '*'
+    to_main.put(['build', p])
+    return redirect('/')
+
+
+@app.route("/abort/<task_patterns>", methods=['POST'])
+def abort(task_patterns: str):
+    to_main.put(['abort', task_patterns])
+    return redirect('/')
 
 
 if __name__ == '__main__':
