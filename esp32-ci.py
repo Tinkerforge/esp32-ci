@@ -1117,7 +1117,7 @@ class PullRepos(Task):
     def read_ci_config(self):
         envs = []
 
-        for d in self.m.workspace.iterdir():
+        for d in sorted(self.m.workspace.iterdir()):
             if not d.is_dir():
                 continue
 
