@@ -224,6 +224,9 @@ class Task:
 
     task_number: int = field(init=False)
 
+    # Set to false if this task can't be aborted
+    abortable: bool = True
+
     keep_in_completed_when_skipped: bool = True
     keep_in_completed_when_finished: bool = True
 
@@ -402,6 +405,9 @@ class Task:
         return self.state
 
     def abort(self):
+        if not self.abortable:
+            return self.state
+
         new_state = self.state
 
         if self.state == 'running':
@@ -410,6 +416,8 @@ class Task:
             except Exception as e:
                 self.log(datetime.now().isoformat(sep=' '), "Failed to abort task:\n", traceback.format_exc())
                 new_state = 'failed'
+        elif self.state == 'enqueued':
+            new_state = 'aborted'
 
         self.__set_state(new_state)
         return self.state
@@ -766,6 +774,7 @@ class ReleaseTestbox(Task):
 
     name: str = "Release Testbox"
     timeout: float = 1
+    abortable: bool = False
     keep_in_completed_when_finished: bool = False
 
     testbox: Testbox
