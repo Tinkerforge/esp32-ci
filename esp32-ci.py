@@ -59,7 +59,7 @@ TODO
 import argparse
 from collections import deque
 from dataclasses import dataclass, asdict, KW_ONLY, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from email.message import EmailMessage
 from email.policy import SMTP
 import itertools
@@ -206,6 +206,12 @@ class Resources:
         self.all_testbox_types = [t.type_ for t in self.testboxes]
 
 
+def pretty_timedelta(td):
+    if td.days >= 0:
+        return str(td)
+    return f'-({-td!s})'
+
+
 @dataclass
 class Task:
     # Back-reference to Main, use to get workspace, task_queue, etc
@@ -244,6 +250,11 @@ class Task:
     # Set when start is called
     start_timestamp: float = None
     start_datetime: datetime = None
+    # Set when tick returns != 'running' or when aborted
+    end_timestamp: float = None
+    end_datetime: datetime = None
+
+
     state: State = 'enqueued'
     _log: io.StringIO = field(default_factory=io.StringIO)
 
@@ -284,7 +295,29 @@ class Task:
         return x
 
     def start_datestr(self) -> str:
-        return self.start_datetime.isoformat(" ") if self.state != 'enqueued' else 'enqueued'
+        return self.start_datetime.isoformat(" ") if self.start_datetime is not None else ""
+
+    def end_datestr(self) -> str:
+        return self.end_datetime.isoformat(" ") if self.end_timestamp is not None else ""
+
+    def duration(self) -> str:
+        if self.start_timestamp is None:
+            return ''
+
+        if self.state == 'running':
+            end = time.monotonic()
+        elif self.end_timestamp is None:
+            return ''
+        else:
+            end = self.end_timestamp
+
+        return pretty_timedelta(timedelta(seconds=int(end - self.start_timestamp)))
+
+    def took(self) -> str:
+        if self.state == 'enqueued':
+            return ''
+
+        return f'{self.start_datestr()} {self.duration()}'
 
     def __set_state(self, new_state: State):
         if new_state == self.state:
@@ -300,6 +333,9 @@ class Task:
 
         if old_state != 'running':
             return
+
+        self.end_timestamp = time.monotonic()
+        self.end_datetime = datetime.now().replace(microsecond=0)
 
         for fn in self.__on_done_fns:
             new_state = fn(self, self.m.resources)
@@ -456,9 +492,9 @@ class Task:
 
     # Return plain text and HTML version
     def mail_body(self) -> (str, (str, str), str):
-        plain = f"{self.name} {self.state} {self.start_datestr()} Task #{self.task_number}"
+        plain = f"{self.name} {self.state} {self.took()} Task #{self.task_number}"
 
-        html = f'<b>{self.name}</b> {self.state_html()} {self.start_datestr()} Task #{self.task_number}'
+        html = f'<b>{self.name}</b> {self.state_html()} <span style="width: 250px">{self.took()}</span> Task #{self.task_number}'
         if self._log.tell() != 0:
             html = dedent(f"""\
                 <details>
@@ -487,13 +523,13 @@ class Task:
     def state_html(self):
         match self.state:
             case 'enqueued' | 'running' | 'skipped':
-                return f'<span style="color:dimgray">{self.state}</span>'
+                return f'<span style="width: 100px; color:dimgray">{self.state}</span>'
             case 'finished':
-                return f'<span style="color:green">{self.state}</span>'
+                return f'<span style="width: 100px; color:green">{self.state}</span>'
             case 'timed_out' | 'failed':
-                return f'<span style="color:red">{self.state}</span>'
+                return f'<span style="width: 100px; color:red">{self.state}</span>'
             case 'aborted':
-                return f'<span style="color:darkorange">{self.state}</span>'
+                return f'<span style="width: 100px; color:darkorange">{self.state}</span>'
 
 
 @dataclass
@@ -600,7 +636,7 @@ class RunProcess(Task):
     def _mail_body_html_details(self, content):
         return dedent(f"""\
             <details>
-                <summary><b>{self.name}</b> {self.state_html()} {self.start_datestr()} Task #{self.task_number}</summary>
+                <summary><b>{self.name}</b> {self.state_html()} <span style="width: 250px">{self.took()}</span> Task #{self.task_number}</summary>
                 {content}
             </details>
         """)
@@ -1090,7 +1126,7 @@ class PullRepos(Task):
 
         html = dedent(f"""\
             <details style="display: block;" open>
-                <summary><b>Pulling repos</b> {self.state_html()} {self.start_datestr()} Task #{self.task_number}</summary>
+                <summary><b>Pulling repos</b> {self.state_html()} <span style="width: 250px">{self.took()}</span> Task #{self.task_number}</summary>
                 <div style="padding-left: 64px" class="commits">{commits_html}</div>
             </details>
         """)
@@ -1202,6 +1238,13 @@ def format_html(tasks: list[Task]) -> (str, str, str):
                 }
                 .task-hidden {
                     display: none
+                }
+                details > summary > b {
+                    display: inline-block;
+                    width: 400px;
+                }
+                details > summary > span {
+                    display: inline-block;
                 }
             </style>""")
     }
