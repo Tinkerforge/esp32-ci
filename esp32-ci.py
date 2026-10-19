@@ -1228,6 +1228,7 @@ class SendEmail(Task):
     _: KW_ONLY
 
     name: str = 'Send email'
+    keep_in_completed_when_skipped: bool = False
 
     sent_ci_fixed: bool = True
 
@@ -1405,7 +1406,7 @@ class Main:
 
         self._task_queue: deque[Task] = deque()
         self.running_tasks: list[Task] = []
-        self.completed_tasks: deque[Task] = deque(maxlen=200)
+        self.completed_tasks: deque[Task] = deque(maxlen=1000)
 
         while True:
             try:
