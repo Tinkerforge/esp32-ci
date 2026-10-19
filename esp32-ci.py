@@ -1486,25 +1486,6 @@ class Main:
                         print('join')
                         return
 
-                    # case ['build', env_names]:
-                    #     print('build', env_names)
-                    #     if 'all' in env_names:
-                    #         env_names = [e.name for e in self.environments]
-                    #
-                    #     unknown_envs = [e for e in self.environments if e.name not in env_names]
-                    #     if len(unknown_envs) != 0:
-                    #         print("Unknown environments", *unknown_envs)
-                    #
-                    #     envs = [e for e in self.environments if e.name in env_names]
-                    #
-                    #     task = Build(
-                    #             number=self.ci_state.build_number,
-                    #             timeout=3 * 60 * len(envs),
-                    #             jobs=[Job(build_number=self.ci_state.build_number, number=i, env=e, workspace=self.workspace) for i, e in enumerate(envs)]
-                    #     )
-                    #
-                    #     print("Enqueueing", task)
-                    #     task_queue.append(task)
 
                     case ['abort']:
                         print('abort')
@@ -1548,19 +1529,6 @@ class Main:
                             """)
 
                         q_out.put(html)
-
-
-                    # case ['completed_tasks', q_out]:
-                    #     print('completed_tasks', q_out)
-                    #     q_out.put("<hr/>" + "<hr/>".join(t.get_row() for t in completed_tasks) + "<hr/>")
-                    #
-                    # case ['task_queue', q_out]:
-                    #     print('task_queue', q_out)
-                    #     q_out.put(task_queue)
-                    #
-                    # case ['current_task', q_out]:
-                    #     print('current_task', q_out)
-                    #     q_out.put(current_task)
 
                     case x:
                         print("hier", x)
@@ -1611,38 +1579,6 @@ def index():
     return Response(from_main.get(), "text/html")
 
 
-# @app.route("/build/<envs>")
-# def build(envs: str):
-#     to_main.put(['build', envs.split(',')])
-#     return "OK"
-#
-#
-# @app.route("/completed_tasks")
-# def completed_tasks():
-#     from_main = Queue()
-#     to_main.put(['completed_tasks', from_main])
-#     return from_main.get()
-#
-#
-# @app.route("/task_queue")
-# def task_queue():
-#     from_main = Queue()
-#     to_main.put(['task_queue', from_main])
-#     return from_main.get()
-#
-#
-# @app.route("/current_task")
-# def current_task():
-#     from_main = Queue()
-#     to_main.put(['current_task', from_main])
-#     return from_main.get()
-#
-#
-# @app.route("/result/<build_number>/<job_number>")
-# def result(build_number, job_number):
-#     from_main = Queue()
-#     to_main.put(['job_details', build_number, job_number])
-#     return from_main.get()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
