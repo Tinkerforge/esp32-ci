@@ -1310,9 +1310,13 @@ class SendEmail(Task):
 
         tasks = [t for t in itertools.islice(self.m.completed_tasks, last_sent + 1, None)]
 
+        if any(t.state == 'aborted' for t in tasks):
+            self.log("Found aborted tasks; skipping")
+            return 'skipped'
+
         self.log({t.task_number: task_succeeded(t) for t in tasks})
 
-        self.sent_ci_fixed = all(task_succeeded(t) for t in tasks)
+        self.sent_ci_fixed = all(task_succeeded(t) for t in tasks) and any(t.state == 'finished' for t in tasks)
 
         self.log(f"{self.sent_ci_fixed=}")
 
