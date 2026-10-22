@@ -1498,12 +1498,37 @@ class Main:
         print(datetime.now().isoformat(sep=' '), task)
         self._task_queue.append(task)
 
+    def cleanup_completed_tasks(self):
+        leaves = [t for t in self.completed_tasks if t.state in ('finished', 'skipped') and len(t.children) == 0]
+
+        to_delete = set()
+
+        for t in leaves:
+            while True:
+                to_delete.add(t)
+                if t.parent is None:
+                    break
+
+                try:
+                    p = next(p for p in self.completed_tasks if p.task_number == t.parent)
+                except StopIteration:
+                    break
+
+                p.children.remove(t.task_number)
+
+                if p.state not in ('finished', 'skipped') or len(p.children) != 0:
+                    break
+
+                t = p
+
+        self.completed_tasks = [t for t in self.completed_tasks if t not in to_delete]
+
     def main(self):
         last_pull = 0
 
         self._task_queue: deque[Task] = deque()
         self.running_tasks: list[Task] = []
-        self.completed_tasks: deque[Task] = deque(maxlen=1000)
+        self.completed_tasks: deque[Task] = deque(maxlen=200)
 
         while True:
             try:
@@ -1613,6 +1638,7 @@ class Main:
 
             # Pull every 10 minutes if nothing else to do
             if len(self.running_tasks) == 0 and len(self._task_queue) == 0 and time.monotonic() - last_pull > 60 * 10:
+                self.cleanup_completed_tasks()
                 print("10 minutes elapsed, fetching repos")
                 last_pull = time.monotonic()
                 self.enqueue(build_pipeline(self, force_build=self.force_build))
