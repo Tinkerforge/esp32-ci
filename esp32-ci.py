@@ -907,7 +907,6 @@ class RunTests(RunOnTestbox):
     name: str = "Run tests"
     working_dir: Path = Path(".")
     cmd: list[str] = field(init=False)
-    redirect_stderr_to_stdout: bool = False
 
     plain_summary: str = None
     html_summary: str = None
@@ -939,7 +938,7 @@ class RunTests(RunOnTestbox):
             html_matrix = HtmlReportMatrix(d)
 
             with NamedTemporaryFile(dir=d, delete_on_close=False) as f:
-                f.write(self.stdout)
+                f.write(self.stdout[self.stdout.find(b'<?xml version="1.0" ?>'):])
                 f.close()
                 try:
                     plain_matrix.add_report(f.name)
