@@ -213,7 +213,7 @@ def pretty_timedelta(td):
     return f'-({-td!s})'
 
 
-@dataclass
+@dataclass(eq=False)
 class Task:
     # Back-reference to Main, use to get workspace, task_queue, etc
     m: 'Main'
@@ -272,6 +272,12 @@ class Task:
         self.task_number = self.m.next_task_number()
 
         self.__post_init_called = True
+
+    def __eq__(self, other):
+        return isinstance(other, Task) and self.task_number == other.task_number
+
+    def __hash__(self):
+        return self.task_number
 
     # Called just before this task's tick function will return 'finished' for the first time.
     # This task is passed as parameter as if then is a member function.
@@ -541,7 +547,7 @@ class Task:
                 return f'<span style="width: 100px; color:darkorange">{self.state}</span>'
 
 
-@dataclass
+@dataclass(eq=False)
 class RunProcess(Task):
     _: KW_ONLY
 
@@ -679,7 +685,7 @@ class RunProcess(Task):
         return super().__str__() + f" {self.name}"
 
 
-@dataclass
+@dataclass(eq=False)
 class CompileFirmware(RunProcess):
     _: KW_ONLY
 
@@ -752,7 +758,7 @@ class CompileFirmware(RunProcess):
             self.log("Produced artifacts", ", ".join(str(x) for x in self.artifacts))
 
 
-@dataclass
+@dataclass(eq=False)
 class AcquireTestbox(Task):
     _: KW_ONLY
 
@@ -780,7 +786,7 @@ class AcquireTestbox(Task):
         resources.testboxes.remove(self.testbox)
 
 
-@dataclass
+@dataclass(eq=False)
 class RunOnTestbox(RunProcess):
     _: KW_ONLY
 
@@ -788,7 +794,7 @@ class RunOnTestbox(RunProcess):
 
 
 
-@dataclass
+@dataclass(eq=False)
 class ReleaseTestbox(Task):
     _: KW_ONLY
 
@@ -813,7 +819,7 @@ class ReleaseTestbox(Task):
             self.testbox = None
 
 
-@dataclass
+@dataclass(eq=False)
 class PrepareRPI(RunOnTestbox):
     _: KW_ONLY
 
@@ -842,7 +848,7 @@ class PrepareRPI(RunOnTestbox):
         self.popen_args = {"shell": True}
 
 
-@dataclass
+@dataclass(eq=False)
 class UploadFirmware(RunOnTestbox):
     _: KW_ONLY
 
@@ -863,7 +869,7 @@ class UploadFirmware(RunOnTestbox):
         ]
 
 
-@dataclass
+@dataclass(eq=False)
 class FlashFirmware(RunOnTestbox):
     _: KW_ONLY
 
@@ -883,7 +889,7 @@ class FlashFirmware(RunOnTestbox):
         ]
 
 
-@dataclass
+@dataclass(eq=False)
 class RunTests(RunOnTestbox):
     _: KW_ONLY
 
@@ -998,7 +1004,7 @@ class RunTests(RunOnTestbox):
         msg.add_attachment(self.stdout, maintype="application", subtype="junit+xml", filename=f"{self.task_number}-{self.name}-junit.xml")
 
 
-@dataclass
+@dataclass(eq=False)
 class PullRepos(Task):
     _: KW_ONLY
 
@@ -1299,7 +1305,7 @@ def format_html(tasks: list[Task]) -> (str, str, str):
     return plain, styles, html
 
 
-@dataclass
+@dataclass(eq=False)
 class SendEmail(Task):
     _: KW_ONLY
 
