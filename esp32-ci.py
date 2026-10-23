@@ -1685,7 +1685,13 @@ class Main:
                         self.enqueue(SendEmail(self, build_number=last_task.build_number))
 
             # Pull every 10 minutes if nothing else to do
-            if len(self.running_tasks) == 0 and len(self._task_queue) == 0 and time.monotonic() - last_pull > 60 * 10:
+            if len(self.running_tasks) == 0 and len(self._task_queue) == 0 and time.monotonic() - last_pull > 10:
+                print("Cleaning up build directories")
+                for p in self.workspace.glob('esp32-firmware*/software/build/*.bin'):
+                    p.unlink()
+                for p in self.workspace.glob('esp32-firmware*/software/build/*.elf'):
+                    p.unlink()
+
                 print("10 minutes elapsed, fetching repos")
                 last_pull = time.monotonic()
                 self.enqueue(build_pipeline(self, force_build=self.force_build))
