@@ -81,6 +81,7 @@ import html
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 import signal
 from fnmatch import fnmatch
+import socket
 
 from flask import Flask, Response, redirect, request
 import git
@@ -522,16 +523,19 @@ class Task:
     def mail_body(self) -> (str, (str, str), str):
         plain = f"{self.name} {self.state} {self.took()} Task #{self.task_number} Build #{self.build_number}"
 
-        html = f'<b>{self.name}</b> {self.state_html()} <span style="width: 250px">{self.took()}</span> Task #{self.task_number} Build #{self.build_number}'
+        html = f'<b>{self.name}</b> {self.state_html()} <span style="width: 250px">{self.took()}</span> Task <a href="http://{socket.gethostname()}.localdomain#task-{self.task_number}">#{self.task_number}</a> Build <a href="http://{socket.gethostname()}.localdomain#build-{self.build_number}">#{self.build_number}</a>'
         if self._log.tell() != 0:
             html = dedent(f"""\
-                <details>
+                <details class="task-{self.state}">
                     <summary>{html}</summary>
+                    <span id="task-{self.task_number}"></span>
                     <pre>
                         {self._log.getvalue()}
                     </pre>
                 </details>
             """)
+        else:
+            html = f'<span class="task-{self.state}" id="task-{self.task_number}">{html}</span>'
 
         return plain, ('', ''), html
 
@@ -673,8 +677,9 @@ class RunProcess(Task):
 
     def _mail_body_html_details(self, content):
         return dedent(f"""\
-            <details>
-                <summary><b>{self.name}</b> {self.state_html()} <span style="width: 250px">{self.took()}</span> Task #{self.task_number} Build #{self.build_number}</summary>
+            <details class="task-{self.state}">
+                <summary><b>{self.name}</b> {self.state_html()} <span style="width: 250px">{self.took()}</span> Task <a href="http://{socket.gethostname()}.localdomain#task-{self.task_number}">#{self.task_number}</a> Build <a href="http://{socket.gethostname()}.localdomain#build-{self.build_number}">#{self.build_number}</a></summary>
+                <span id="task-{self.task_number}"></span>
                 {content}
             </details>
         """)
@@ -1177,8 +1182,8 @@ class PullRepos(Task):
         commits_plain, commits_html = self.format_commits(commits)
 
         html = dedent(f"""\
-            <details style="display: block;" open>
-                <summary><b>Pulling repos</b> {self.state_html()} <span style="width: 250px">{self.took()}</span> Task #{self.task_number} Build #{self.build_number}</summary>
+            <details class="task-{self.state}" style="display: block;" open>
+                <summary><b>Pulling repos</b> {self.state_html()} <span style="width: 250px">{self.took()}</span> Task <a href="http://{socket.gethostname()}.localdomain#task-{self.task_number}">#{self.task_number}</a> Build <a href="http://{socket.gethostname()}.localdomain#build-{self.build_number}">#{self.build_number}</a></summary>
                 <div style="padding-left: 64px" class="commits">{commits_html}</div>
             </details>
         """)
@@ -1285,7 +1290,7 @@ class PullRepos(Task):
         return self.build_number
 
 
-def format_html(tasks: list[Task]) -> (str, str, str):
+def format_html(tasks: list[Task], separate_builds=False) -> (str, str, str):
     styles = {
         "base": dedent("""\
             <style>
@@ -1293,9 +1298,9 @@ def format_html(tasks: list[Task]) -> (str, str, str):
                     display: block;
                     width: fit-content;
                 }
-                .task-hidden {
+                /*.task-hidden {
                     display: none
-                }
+                }*/
                 details > summary > b {
                     display: inline-block;
                     width: 400px;
@@ -1303,11 +1308,31 @@ def format_html(tasks: list[Task]) -> (str, str, str):
                 details > summary > span {
                     display: inline-block;
                 }
+                hr.build-separator {
+                    border: none;
+                    border-top: 1px solid #333333;
+                    color: #333333;
+                    overflow: visible;
+                    text-align: left;
+                    height: 5px;
+                    padding: 0 10;
+                    margin: 1em 0;
+                    width: 930px;
+                }
+                hr.build-separator::after {
+                    background: white;
+                    content: " Build #" attr(data-build-number) " ";
+                    padding: 0 4px;
+                    position: relative;
+                    top: -0.6em;
+                }
             </style>""")
     }
 
     plain = ""
     html = ""
+
+    last_build = -1
 
     for t in tasks:
         p, s, h = t.mail_body()
@@ -1318,6 +1343,11 @@ def format_html(tasks: list[Task]) -> (str, str, str):
 
         styles[s[0]] = s[1]
         plain += "\n" + p
+
+        if separate_builds and t.build_number != last_build:
+            html += f'<hr class="build-separator" data-build-number="{t.build_number}" id="build-{t.build_number}">'
+            last_build = t.build_number
+
         html += "\n" + h
 
     return plain, styles, html
@@ -1377,6 +1407,8 @@ class SendEmail(Task):
         msg = EmailMessage()
 
         plain, styles, html = format_html(reversed(tasks))
+
+        html = "</summary>".join(x[max(0, x.find("</details>")):] for x in html.split("</summary>"))
 
         html = dedent(f"""\
             <html>
@@ -1570,20 +1602,30 @@ class Main:
                         print('html')
 
                         styles = {}
-                        html = '<form method="POST" action="build"><input name="env_patterns" type="text" style="width: 400px" placeholder="empty=build all; env glob patterns separated by ,"><button>Start Build</button></form>'
+                        html = dedent("""\
+                            <form method="POST" action="build">
+                                <input name="env_patterns" type="text" style="width: 400px" placeholder="empty=build all; env glob patterns separated by ,">
+                                <button>Start Build</button>
+                            </form>""")
 
-                        html += "<h3>Enqueued Tasks</h3>"
+                        html += '<div><h3 style="display: inline-block">Enqueued Tasks</h3></div>'
                         _, s, h = format_html(reversed(self._task_queue))
                         styles.update(s)
                         html += h
 
-                        html += '<h3>Running Tasks <form style="display: inline-block;" method="POST" action="abort/*"><button>Abort all</button></form></h3>'
+                        html += '<div><h3 style="display: inline-block">Running Tasks</h3> <form style="display: inline-block;" method="POST" action="abort/*"><button>Abort all</button></form></div>'
                         _, s, h = format_html(reversed(self.running_tasks))
                         styles.update(s)
                         html += h
 
-                        html += "<h3>Completed Tasks</h3>"
-                        _, s, h = format_html(reversed(self.completed_tasks))
+                        html += dedent(f"""\
+                            <div><h3 style="display: inline-block">Completed Tasks</h3>
+                                <input type="checkbox"
+                                       id="hide_completed"
+                                       onchange="document.querySelectorAll('.task-finished').forEach(x => x.style.display = (event.target.checked ? 'none' : null))">
+                                <label for="hide_completed">Hide finished</label></div>
+                            """)
+                        _, s, h = format_html(reversed(self.completed_tasks), separate_builds=True)
                         styles.update(s)
                         html += h
 
