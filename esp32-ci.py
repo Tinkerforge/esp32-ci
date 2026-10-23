@@ -240,6 +240,7 @@ class Task:
 
     hide_when_skipped: bool = True
     hide_when_finished: bool = True
+    remove_when_skipped: bool = False
 
     # in seconds. Set to -1 to run without timeout
     timeout: float
@@ -1024,6 +1025,7 @@ class PullRepos(Task):
     timeout: float = 30
 
     hide_when_skipped: bool = False
+    remove_when_skipped: bool = True
 
     thread: threading.Thread = None
     fetch_timeout: float = 10
@@ -1513,31 +1515,6 @@ class Main:
         print(datetime.now().isoformat(sep=' '), task)
         self._task_queue.append(task)
 
-    def cleanup_completed_tasks(self):
-        leaves = [t for t in self.completed_tasks if t.state in ('finished', 'skipped') and len(t.children) == 0]
-
-        to_delete = set()
-
-        for t in leaves:
-            while True:
-                to_delete.add(t)
-                if t.parent is None:
-                    break
-
-                try:
-                    p = next(p for p in self.completed_tasks if p.task_number == t.parent)
-                except StopIteration:
-                    break
-
-                p.children.remove(t.task_number)
-
-                if p.state not in ('finished', 'skipped') or len(p.children) != 0:
-                    break
-
-                t = p
-
-        self.completed_tasks = [t for t in self.completed_tasks if t not in to_delete]
-
     def main(self):
         last_pull = 0
 
@@ -1630,6 +1607,10 @@ class Main:
 
             for t in done:
                 print(datetime.now().isoformat(sep=" "), t)
+
+                if t.remove_when_skipped and t.state == 'skipped':
+                    continue
+
                 self.completed_tasks.append(t)
 
             # Task done? Start next task
