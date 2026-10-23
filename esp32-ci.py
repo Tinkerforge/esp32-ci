@@ -1685,7 +1685,7 @@ class Main:
                         self.enqueue(SendEmail(self, build_number=last_task.build_number))
 
             # Pull every 10 minutes if nothing else to do
-            if len(self.running_tasks) == 0 and len(self._task_queue) == 0 and time.monotonic() - last_pull > 10:
+            if len(self.running_tasks) == 0 and len(self._task_queue) == 0 and time.monotonic() - last_pull > 10 * 60:
                 print("Cleaning up build directories")
                 for p in self.workspace.glob('esp32-firmware*/software/build/*.bin'):
                     p.unlink()
