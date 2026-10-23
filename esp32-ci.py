@@ -1686,7 +1686,6 @@ class Main:
 
             # Pull every 10 minutes if nothing else to do
             if len(self.running_tasks) == 0 and len(self._task_queue) == 0 and time.monotonic() - last_pull > 60 * 10:
-                self.cleanup_completed_tasks()
                 print("10 minutes elapsed, fetching repos")
                 last_pull = time.monotonic()
                 self.enqueue(build_pipeline(self, force_build=self.force_build))
