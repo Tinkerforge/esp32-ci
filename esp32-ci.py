@@ -238,8 +238,8 @@ class Task:
     # Set to false if this task can't be aborted
     abortable: bool = True
 
-    keep_in_completed_when_skipped: bool = True
-    keep_in_completed_when_finished: bool = True
+    hide_when_skipped: bool = True
+    hide_when_finished: bool = True
 
     # in seconds. Set to -1 to run without timeout
     timeout: float
@@ -776,7 +776,7 @@ class AcquireTestbox(Task):
 
     name: str = "Acquire Testbox"
     timeout: float = 1
-    keep_in_completed_when_finished: bool = False
+    hide_when_finished: bool = False
 
     required_testbox_type: str
 
@@ -813,7 +813,7 @@ class ReleaseTestbox(Task):
     name: str = "Release Testbox"
     timeout: float = 1
     abortable: bool = False
-    keep_in_completed_when_finished: bool = False
+    hide_when_finished: bool = False
 
     testbox: Testbox
 
@@ -841,7 +841,7 @@ class PrepareRPI(RunOnTestbox):
     name: str = "Prepare Raspberry Pi"
     working_dir: Path = Path(".")
     cmd: list[str] = field(init=False)
-    keep_in_completed_when_finished: bool = False
+    hide_when_finished: bool = False
 
     def __post_init__(self):
         super().__post_init__()
@@ -870,7 +870,7 @@ class UploadFirmware(RunOnTestbox):
     name: str = "Upload firmware"
     working_dir: Path = Path(".")
     cmd: list[str] = field(init=False)
-    keep_in_completed_when_finished: bool = False
+    hide_when_finished: bool = False
 
     def __post_init__(self):
         super().__post_init__()
@@ -889,7 +889,7 @@ class FlashFirmware(RunOnTestbox):
     name: str = "Flash firmware"
     working_dir: Path = Path(".")
     cmd: list[str] = field(init=False)
-    keep_in_completed_when_finished: bool = False
+    hide_when_finished: bool = False
 
     def __post_init__(self):
         super().__post_init__()
@@ -1023,7 +1023,7 @@ class PullRepos(Task):
 
     timeout: float = 30
 
-    keep_in_completed_when_skipped: bool = False
+    hide_when_skipped: bool = False
 
     thread: threading.Thread = None
     fetch_timeout: float = 10
@@ -1310,8 +1310,8 @@ def format_html(tasks: list[Task]) -> (str, str, str):
     for t in tasks:
         p, s, h = t.mail_body()
 
-        if (t.state == 'skipped' and not t.keep_in_completed_when_skipped) or \
-           (t.state == 'finished' and not t.keep_in_completed_when_finished):
+        if (t.state == 'skipped' and not t.hide_when_skipped) or \
+           (t.state == 'finished' and not t.hide_when_finished):
             h = f'<div class="task-hidden">{h}</div>'
 
         styles[s[0]] = s[1]
@@ -1326,7 +1326,7 @@ class SendEmail(Task):
     _: KW_ONLY
 
     name: str = 'Send email'
-    keep_in_completed_when_skipped: bool = False
+    hide_when_skipped: bool = False
 
     sent_ci_fixed: bool = True
 
