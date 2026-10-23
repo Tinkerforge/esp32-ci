@@ -1448,7 +1448,9 @@ class SendEmail(Task):
 
             for t in tasks:
                 t.mail_add_attachments(dst_dir)
-            subprocess.run(["7z", "a", "-t7z", "-mx9", str(dst), str(dst_dir / "*")], check=True)
+            proc = subprocess.run(["7z", "a", "-t7z", "-mx9", str(dst), str(dst_dir / "*")], check=True, capture_output=True, text=True)
+            self.log(proc.stdout)
+            self.log(proc.stderr)
             msg.add_attachment(dst.read_bytes(), maintype="application", subtype="x-7z-compressed", filename=f"logs.7z")
 
         if self.m.config.smtp_debug:
