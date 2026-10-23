@@ -519,9 +519,9 @@ class Task:
 
     # Return plain text and HTML version
     def mail_body(self) -> (str, (str, str), str):
-        plain = f"{self.name} {self.state} {self.took()} Task #{self.task_number}"
+        plain = f"{self.name} {self.state} {self.took()} Task #{self.task_number} Build #{self.build_number}"
 
-        html = f'<b>{self.name}</b> {self.state_html()} <span style="width: 250px">{self.took()}</span> Task #{self.task_number}'
+        html = f'<b>{self.name}</b> {self.state_html()} <span style="width: 250px">{self.took()}</span> Task #{self.task_number} Build #{self.build_number}'
         if self._log.tell() != 0:
             html = dedent(f"""\
                 <details>
@@ -673,7 +673,7 @@ class RunProcess(Task):
     def _mail_body_html_details(self, content):
         return dedent(f"""\
             <details>
-                <summary><b>{self.name}</b> {self.state_html()} <span style="width: 250px">{self.took()}</span> Task #{self.task_number}</summary>
+                <summary><b>{self.name}</b> {self.state_html()} <span style="width: 250px">{self.took()}</span> Task #{self.task_number} Build #{self.build_number}</summary>
                 {content}
             </details>
         """)
@@ -1176,7 +1176,7 @@ class PullRepos(Task):
 
         html = dedent(f"""\
             <details style="display: block;" open>
-                <summary><b>Pulling repos</b> {self.state_html()} <span style="width: 250px">{self.took()}</span> Task #{self.task_number}</summary>
+                <summary><b>Pulling repos</b> {self.state_html()} <span style="width: 250px">{self.took()}</span> Task #{self.task_number} Build #{self.build_number}</summary>
                 <div style="padding-left: 64px" class="commits">{commits_html}</div>
             </details>
         """)
