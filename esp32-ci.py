@@ -13,7 +13,7 @@
 
 """
 Install instructions (assuming Debian >= 13.6)
-- install git, curl, uv
+- install git, curl, uv, 7z
 - create ci user
 - create 'workspace' directory in /home/ci
 - clone gits into the workspace (use ssh to clone!)
@@ -535,8 +535,8 @@ class Task:
 
         return plain, ('', ''), html
 
-    def mail_add_attachments(self, msg: EmailMessage):
-        msg.add_attachment(self._log.getvalue().encode('utf-8'), maintype="text", subtype="plain", filename=f"{self.task_number}-log.txt")
+    def mail_add_attachments(self, d: Path):
+        (d / f"{self.task_number}-log.txt").write_bytes(self._log.getvalue().encode('utf-8'))
 
     def mail_recipients(self) -> list[str]:
         if self.state in ['timed_out', 'failed']:
@@ -688,8 +688,8 @@ class RunProcess(Task):
 
         return plain, ('run_process', Ansi2HTMLConverter().produce_headers()), html
 
-    def mail_add_attachments(self, msg: EmailMessage):
-        msg.add_attachment(self._log.getvalue().encode('utf-8'), maintype="text", subtype="plain", filename=f"{self.task_number}-{self.name}-log.txt")
+    def mail_add_attachments(self,d: Path):
+        (d / f"{self.task_number}-{self.name}-log.txt").write_bytes(self._log.getvalue().encode('utf-8'))
 
     def mail_recipients(self):
         return []
@@ -1011,9 +1011,9 @@ class RunTests(RunOnTestbox):
 
         return plain, ('run_tests', style), super()._mail_body_html_details(table)
 
-    def mail_add_attachments(self, msg: EmailMessage):
-        super().mail_add_attachments(msg)
-        msg.add_attachment(self.stdout, maintype="application", subtype="junit+xml", filename=f"{self.task_number}-{self.name}-junit.xml")
+    def mail_add_attachments(self, d: Path):
+        super().mail_add_attachments(d)
+        (d / f"{self.task_number}-{self.name}-junit.xml").write_bytes(self.stdout[self.stdout.find(b'<?xml version="1.0" ?>'):])
 
 
 @dataclass(eq=False)
@@ -1408,8 +1408,16 @@ class SendEmail(Task):
         else:
             msg['Subject'] = f"ESP32 CI {'(restarted) ' if last_sent == -1 else ''}broken! [{", ".join(sorted(set(x.mail_subject() for x in tasks if not task_succeeded(x))))}]"
 
-        for t in tasks:
-            t.mail_add_attachments(msg)
+        with TemporaryDirectory() as d:
+            dst_dir = Path(d) / "logs"
+            dst_dir.mkdir()
+
+            dst = Path(d) / "logs.7z"
+
+            for t in tasks:
+                t.mail_add_attachments(dst_dir)
+            subprocess.run(["7z", "a", "-t7z", "-mx9", str(dst), str(dst_dir / "*")], check=True)
+            msg.add_attachment(dst.read_bytes(), maintype="application", subtype="x-7z-compressed", filename=f"logs.7z")
 
         if self.m.config.smtp_debug:
             with open(f"/tmp/{self.task_number}.eml", 'wb') as fp:
