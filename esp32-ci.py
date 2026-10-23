@@ -104,6 +104,7 @@ def read_jsonc(path: Path):
 @dataclass
 class CIState:
     next_task_number: int = 1
+    next_build_number: int = 1
 
     @staticmethod
     def read(workspace_dir: Path):
@@ -224,6 +225,9 @@ class Task:
     name_prefix: str = ""
 
     task_number: int = field(init=False)
+
+    # build that this task is associated to
+    build_number: int | None = None
 
     # task number of parent task or None if this task has no parent
     parent: int | None = None
@@ -1272,6 +1276,11 @@ class PullRepos(Task):
 
         return "\n".join(changes_plain), "\n".join(changes_html)
 
+    def assign_build_number(self) -> int:
+        if self.build_number is None:
+            self.build_number = self.m.next_build_number()
+
+        return self.build_number
 
 
 def format_html(tasks: list[Task]) -> (str, str, str):
@@ -1435,25 +1444,25 @@ def build_pipeline(m: 'Main', env_pattern_globs: tuple[str] = ('*',), force_buil
 
         return next(f for f in artifacts if str(f).endswith("_merged.bin"))
 
-    def env_pipeline(e: Environment):
+    def env_pipeline(e: Environment, build_number: int):
         tb_type = env_to_testbox_type(e, m.config)
 
         print(tb_type, m.resources.all_testbox_types)
 
         if tb_type not in m.resources.all_testbox_types:
-            return CompileFirmware(m, name_prefix=e.name, env=e)
+            return CompileFirmware(m, build_number=build_number, name_prefix=e.name, env=e)
 
         return \
-            CompileFirmware(m, name_prefix=e.name, env=e).then(lambda compile_firmware:
-            AcquireTestbox(m, name_prefix=e.name, required_testbox_type=tb_type)
-                .finally_(lambda at: ReleaseTestbox(m, name_prefix=e.name, testbox=at.testbox))
+            CompileFirmware(m, build_number=build_number, name_prefix=e.name, env=e).then(lambda compile_firmware:
+            AcquireTestbox(m, build_number=build_number, name_prefix=e.name, required_testbox_type=tb_type)
+                .finally_(lambda at: ReleaseTestbox(m, build_number=build_number, name_prefix=e.name, testbox=at.testbox))
                 .then(lambda at:
-            PrepareRPI(m, name_prefix=e.name, testbox=at.testbox,
+            PrepareRPI(m, build_number=build_number, name_prefix=e.name, testbox=at.testbox,
                 esp32_master_repo=e.working_dir).then(lambda _:
-            UploadFirmware(m, name_prefix=e.name, testbox=at.testbox,
+            UploadFirmware(m, build_number=build_number, name_prefix=e.name, testbox=at.testbox,
                 file=artifacts_to_firmware(compile_firmware.artifacts)).then(lambda _:
-            FlashFirmware(m, name_prefix=e.name, testbox=at.testbox).then(lambda _:
-            RunTests(m, name_prefix=e.name, testbox=at.testbox)
+            FlashFirmware(m, build_number=build_number, name_prefix=e.name, testbox=at.testbox).then(lambda _:
+            RunTests(m, build_number=build_number, name_prefix=e.name, testbox=at.testbox)
             )))))
 
     def filter_envs(envs: list[Environment]):
@@ -1463,19 +1472,18 @@ def build_pipeline(m: 'Main', env_pattern_globs: tuple[str] = ('*',), force_buil
     if force_build:
         return \
             PullRepos(m).finally_(lambda pull_repos: [
-                env_pipeline(e) for e in filter_envs(pull_repos.read_ci_config())
+                env_pipeline(e, pull_repos.assign_build_number()) for e in filter_envs(pull_repos.read_ci_config())
             ])
 
     return \
         PullRepos(m).then(lambda pull_repos: [
-            env_pipeline(e) for e in filter_envs(pull_repos.read_ci_config())
+            env_pipeline(e, pull_repos.assign_build_number()) for e in filter_envs(pull_repos.read_ci_config())
         ])
 
 
 class Main:
     def __init__(self, q: Queue, workspace: Path, force_build: bool = False):
         self.workspace = workspace.resolve(strict=True)
-        self.ci_state = CIState.read(self.workspace)
         self.force_build = force_build
 
         self.config = Config.read(self.workspace)
@@ -1488,9 +1496,17 @@ class Main:
         self.thread.start()
 
     def next_task_number(self):
-        result = self.ci_state.next_task_number
-        self.ci_state.next_task_number += 1
-        self.ci_state.write(self.workspace)
+        ci_state = CIState.read(self.workspace)
+        result = ci_state.next_task_number
+        ci_state.next_task_number += 1
+        ci_state.write(self.workspace)
+        return result
+
+    def next_build_number(self):
+        ci_state = CIState.read(self.workspace)
+        result = ci_state.next_build_number
+        ci_state.next_build_number += 1
+        ci_state.write(self.workspace)
         return result
 
     def enqueue(self, task):
@@ -1633,7 +1649,7 @@ class Main:
                 if len(self.completed_tasks) > 0:
                     last_task = self.completed_tasks[-1]
                     if not isinstance(last_task, SendEmail) and not (isinstance(last_task, PullRepos) and last_task.state == 'skipped'):
-                        self.enqueue(SendEmail(self))
+                        self.enqueue(SendEmail(self, build_number=last_task.build_number))
 
             # Pull every 10 minutes if nothing else to do
             if len(self.running_tasks) == 0 and len(self._task_queue) == 0 and time.monotonic() - last_pull > 60 * 10:
