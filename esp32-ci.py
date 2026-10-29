@@ -1724,7 +1724,7 @@ app = Flask(__name__, static_folder="./static")
 def index():
     from_main = Queue()
     to_main.put(['html', from_main])
-    return Response(from_main.get(), "text/html")
+    return Response(from_main.get(), 200, mimetype="text/html")
 
 
 @app.route("/build", methods=['POST'])
