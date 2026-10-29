@@ -516,11 +516,29 @@ class Task:
 
     # END RESOURCE MANAGEMENT
 
-    def mail_subject(self):
+    _mail_cache: dict[str, typing.Any] = field(default_factory=dict)
+
+    def __cached(self, key, val_fn, fill_cache):
+        if fill_cache:
+            return self._mail_cache.setdefault(key, val_fn())
+        else:
+            return self._mail_cache.get(key, val_fn())
+
+    def fill_cache(self):
+        self.mail_subject(fill_cache=True)
+        self.mail_body(fill_cache=True)
+
+    def mail_subject(self, fill_cache=False):
+        return self.__cached('subject', self._mail_subject, fill_cache)
+
+    def _mail_subject(self):
         return f"{self.name}"
 
+    def mail_body(self, fill_cache=False) -> (str, (str, str), str):
+        return self.__cached('body', self._mail_body, fill_cache)
+
     # Return plain text and HTML version
-    def mail_body(self) -> (str, (str, str), str):
+    def _mail_body(self) -> (str, (str, str), str):
         plain = f"{self.name} {self.state} {self.took()} Task #{self.task_number} Build #{self.build_number}"
 
         html = f'<b>{self.name}</b> {self.state_html()} <span style="width: 250px">{self.took()}</span> Task <a href="http://{socket.gethostname()}.localdomain#task-{self.task_number}">#{self.task_number}</a> Build <a href="http://{socket.gethostname()}.localdomain#build-{self.build_number}">#{self.build_number}</a>'
@@ -684,8 +702,8 @@ class RunProcess(Task):
             </details>
         """)
 
-    def mail_body(self):
-        plain = super().mail_body()[0]
+    def _mail_body(self):
+        plain = super()._mail_body()[0]
 
         html = self._mail_body_html_details(f"""<div class="body_foreground body_background" style="font-size: normal; padding: 10px;">
                     <pre class="ansi2html-content">{Ansi2HTMLConverter().convert(self._log.getvalue().strip(), full=False)}</pre>
@@ -693,7 +711,7 @@ class RunProcess(Task):
 
         return plain, ('run_process', Ansi2HTMLConverter().produce_headers()), html
 
-    def mail_add_attachments(self,d: Path):
+    def mail_add_attachments(self, d: Path):
         (d / f"{self.task_number}-{self.name}-log.txt").write_bytes(self._log.getvalue().encode('utf-8'))
 
     def mail_recipients(self):
@@ -964,11 +982,11 @@ class RunTests(RunOnTestbox):
         if plain_matrix.result_stats.get(CaseResult.FAILED, 0) != 0:
             return 'failed'
 
-    def mail_body(self):
+    def _mail_body(self):
         tests_executed = self.state == 'finished' or self.state == 'failed' and self.html_details is not None
 
         if not tests_executed:
-            return super().mail_body()
+            return super()._mail_body()
 
 
 
@@ -1011,7 +1029,7 @@ class RunTests(RunOnTestbox):
 
         table = re.sub(r'(href=")([^"]*)(")', lambda match: f"{match.group(1)}#{"".join(match.group(2).rsplit('#')[-1])}{match.group(3)}", table)
 
-        plain, _style, _html = super().mail_body()
+        plain, _style, _html = super()._mail_body()
         plain += "\n" + indent(self.plain_summary, "    ")
 
         return plain, ('run_tests', style), super()._mail_body_html_details(table)
@@ -1173,9 +1191,9 @@ class PullRepos(Task):
 
         return envs
 
-    def mail_body(self):
+    def _mail_body(self):
         if self.state != 'finished':
-            return super().mail_body()
+            return super()._mail_body()
 
         commits = self.get_commits()
 
@@ -1188,7 +1206,7 @@ class PullRepos(Task):
             </details>
         """)
 
-        plain = super().mail_body()[0]
+        plain = super()._mail_body()[0]
         plain += f"\n{indent(commits_plain, "    ")}"
 
         return plain, ("pull_repos", "<style>.commits div:nth-child(odd) {background: #eeeeee;}</style>"), html
@@ -1663,6 +1681,7 @@ class Main:
                 if t.remove_when_skipped and t.state == 'skipped':
                     continue
 
+                t.fill_cache()
                 self.completed_tasks.append(t)
 
             # Task done? Start next task
