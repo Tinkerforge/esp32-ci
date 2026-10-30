@@ -32,8 +32,6 @@ Install instructions (assuming Debian >= 13.6)
     - install brickd
 - for each testbox
     - make sure this machine can ssh into the testbox (ssh-copy-id pi@testbox-host)
-- on each testbox
-    - enable ram overlay
 - if testbox for environment with secure boot and flash encryption:
     - add zzz_overrides in workspace, symlink into esp32-firmware/software
     - add entry such as
@@ -82,6 +80,7 @@ from tempfile import NamedTemporaryFile, TemporaryDirectory
 import signal
 from fnmatch import fnmatch
 import socket
+import random
 
 from flask import Flask, Response, redirect, request
 import git
@@ -869,16 +868,9 @@ class PrepareRPI(RunOnTestbox):
 
     def __post_init__(self):
         super().__post_init__()
-        self.cmd = f'git archive HEAD . | ssh {self.testbox.pi_user}@{self.testbox.pi_host} '\
-            '"'\
-            'mv ~/tf/esp32-firmware/software/.venv /tmp/.venv; ' \
-            'rm -rf ~/tf/esp32-firmware && ' \
-            'mkdir -p ~/tf/esp32-firmware/software && ' \
-            'mv /tmp/.venv ~/tf/esp32-firmware/software/.venv; '\
-            'cd ~/tf/esp32-firmware/software && '\
-            'tar -xf -' \
-            '"'
+        prefix = 'esp32-ci_' + hex(random.getrandbits(32))[2:] # drop 0x
 
+        self.cmd = f'git archive --prefix={prefix}/ HEAD . | (cd /tmp/ && tar -xf -) && rsync --mkpath --inplace --recursive --delete --filter="-r .venv" /tmp/{prefix}/ {self.testbox.pi_user}@{self.testbox.pi_host}:~/tf/esp32-firmware/software && rm -r /tmp/{prefix}'
 
         self.working_dir = self.esp32_master_repo.resolve(strict=True)
         self.popen_args = {"shell": True}
