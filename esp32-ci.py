@@ -31,6 +31,8 @@ Install instructions (assuming Debian >= 13.6)
     - sudo apt update && sudo apt upgrade
     - install uv
     - install brickd
+    - install docker in rootless mode (required for some remote_access tests)
+    - install libsodium23 (required for some remote_access tests)
 - for each testbox
     - make sure this machine can ssh into the testbox (ssh-copy-id pi@testbox-host)
 - if testbox for environment with secure boot and flash encryption:
