@@ -4,6 +4,7 @@
 # requires-python = ">=3.12"
 # dependencies = [
 #     "flask",
+#     "Flask-Compress",
 #     "GitPython",
 #     "tinkerforge_util >= 1.7.0",
 #     "ansi2html",
@@ -83,6 +84,7 @@ import socket
 import random
 
 from flask import Flask, Response, redirect, request
+from flask_compress import Compress
 import git
 import tinkerforge_util as tfutil
 from ansi2html import Ansi2HTMLConverter
@@ -1710,6 +1712,7 @@ class Main:
 
 
 app = Flask(__name__, static_folder="./static")
+Compress(app)
 
 
 @app.route("/")
