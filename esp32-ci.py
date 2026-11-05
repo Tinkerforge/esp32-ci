@@ -428,7 +428,7 @@ class Task:
         self.__set_state(new_state)
         return self.state
 
-    def abort(self):
+    def abort(self, timed_out: bool = False):
         if not self.abortable:
             return self.state
 
@@ -443,6 +443,9 @@ class Task:
         elif self.state == 'enqueued':
             new_state = 'aborted'
 
+        if new_state == 'aborted' and timed_out:
+            new_state = 'timed_out'
+
         self.__set_state(new_state)
         return self.state
 
@@ -451,7 +454,7 @@ class Task:
 
         if self.state == 'running':
             if self.timeout > -1 and time.monotonic() - self.start_timestamp > self.timeout:
-                return self.abort()
+                return self.abort(timed_out=True)
 
             try:
                 new_state = self.__verify_state(self._tick())
