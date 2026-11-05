@@ -655,11 +655,6 @@ class RunProcess(Task):
 
         if self.proc.returncode is None:
             # process still running
-            if self.timeout > -1 and time.monotonic() - self.start_timestamp > self.timeout:
-                self.log(f"{datetime.now().isoformat()} Process timed out; aborting")
-                self._kill_pg()
-                return 'timed_out'
-
             try:
                 self.proc.wait(timeout=0.1)
             except subprocess.TimeoutExpired:
