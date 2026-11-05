@@ -454,6 +454,7 @@ class Task:
 
         if self.state == 'running':
             if self.timeout > -1 and time.monotonic() - self.start_timestamp > self.timeout:
+                self.log(f"{datetime.now().isoformat()} Task timed out; aborting")
                 return self.abort(timed_out=True)
 
             try:
