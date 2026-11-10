@@ -838,7 +838,6 @@ class ReleaseTestbox(Task):
 
     name: str = "Release Testbox"
     timeout: float = 1
-    abortable: bool = False
     hide_when_finished: bool = False
 
     testbox: Testbox
@@ -850,6 +849,12 @@ class ReleaseTestbox(Task):
 
         self.on_done(lambda self, resources: self._release(resources))
 
+    # TODO: Why is this necessary?
+    # Sometimes aborting previous tasks results in the ReleaseTestbox task also being aborted?
+    # Handle this by releasing on abort.
+    def _abort(self):
+        self._release(self.m.resources)
+        return 'finished'
     def _release(self, resources: Resources):
         if self.testbox is not None:
             resources.testboxes.append(self.testbox)
