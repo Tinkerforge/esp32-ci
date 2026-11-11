@@ -1352,6 +1352,9 @@ def format_html(tasks: list[Task], separate_builds=False) -> (str, str, str):
 
     last_build = -1
 
+    if separate_builds:
+        tasks = sorted(tasks, key=lambda t: t.build_number, reverse=True)
+
     for t in tasks:
         p, s, h = t.mail_body()
 
