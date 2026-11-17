@@ -849,6 +849,7 @@ class ReleaseTestbox(Task):
     def _abort(self):
         self._release(self.m.resources)
         return 'finished'
+
     def _release(self, resources: Resources):
         if self.testbox is not None:
             resources.testboxes.append(self.testbox)
@@ -870,7 +871,7 @@ class PrepareRPI(RunOnTestbox):
 
     def __post_init__(self):
         super().__post_init__()
-        prefix = 'esp32-ci_' + hex(random.getrandbits(32))[2:] # drop 0x
+        prefix = 'esp32-ci_' + hex(random.getrandbits(32))[2:]  # drop 0x
 
         self.cmd = f'git archive --prefix={prefix}/ HEAD . | (cd /tmp/ && tar -xf -) && rsync --mkpath --inplace --recursive --delete --filter="-r .venv" /tmp/{prefix}/ {self.testbox.pi_user}@{self.testbox.pi_host}:~/tf/esp32-firmware/software && rm -r /tmp/{prefix}'
 
@@ -1147,7 +1148,6 @@ class PullRepos(Task):
                         pass
                     case 'something':
                         found_commits = True
-
         except Exception:
             self.log(traceback.format_exc())
             self._q.put('failed')
