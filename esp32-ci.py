@@ -555,9 +555,7 @@ class Task:
                 <details class="task-{self.state}">
                     <summary>{html}</summary>
                     <span id="task-{self.task_number}"></span>
-                    <pre>
-                        {self._log.getvalue()}
-                    </pre>
+                    <pre>{self._log.getvalue()}</pre>
                 </details>
             """)
         else:
