@@ -947,7 +947,7 @@ class RunTests(RunOnTestbox):
             "-q",
             f"{self.testbox.pi_user}@{self.testbox.pi_host}",
             "-t",
-            f"bash -lc \"cd tf/esp32-firmware/software; test_runner/test_runner.py {tf} --host {self.testbox.esp_host} --brickd localhost --junit-xml\""
+            f"bash -lc \"cd ~/tf/esp32-firmware/software; ./test_runner/test_runner.py {tf} --host {self.testbox.esp_host} --brickd localhost --junit-xml\""
         ]
 
         self.on_done(lambda self, _: self._convert_to_html())
