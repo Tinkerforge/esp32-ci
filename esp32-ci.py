@@ -672,9 +672,9 @@ class RunProcess(Task):
 
     def _log_output(self):
         if self.redirect_stderr_to_stdout:
-            self.log("=========== Begin Output ===========")
+            self.log("=========== Begin output ===========")
             self.log(self.stdout.decode('utf-8'))
-            self.log("===========  End Output  ===========")
+            self.log("===========  End output  ===========")
         else:
             self.log("=========== Begin stdout ===========")
             self.log(self.stdout.decode('utf-8'))
@@ -795,7 +795,7 @@ class CompileFirmware(RunProcess):
 class AcquireTestbox(Task):
     _: KW_ONLY
 
-    name: str = "Acquire Testbox"
+    name: str = "Acquire testbox"
     timeout: float = 1
     hide_when_finished: bool = False
 
@@ -830,7 +830,7 @@ class RunOnTestbox(RunProcess):
 class ReleaseTestbox(Task):
     _: KW_ONLY
 
-    name: str = "Release Testbox"
+    name: str = "Release testbox"
     timeout: float = 1
     hide_when_finished: bool = False
 
@@ -1617,7 +1617,7 @@ class Main:
                         html = dedent("""\
                             <form method="POST" action="build">
                                 <input name="env_patterns" type="text" style="width: 400px" placeholder="empty=build all; env glob patterns separated by ,">
-                                <button>Start Build</button>
+                                <button>Start build</button>
                             </form>""")
 
                         html += '<div><h3 style="display: inline-block">Enqueued Tasks</h3></div>'
