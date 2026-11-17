@@ -217,6 +217,10 @@ def pretty_timedelta(td):
     return f'-({-td!s})'
 
 
+def make_fs_safe(name):
+    return ''.join([c if (c.lower() >= 'a' and c.lower() <= 'z') or (c >= '0' and c <= '9') else '-' for c in name])
+
+
 @dataclass(eq=False)
 class Task:
     # Back-reference to Main, use to get workspace, task_queue, etc
@@ -225,8 +229,7 @@ class Task:
     _: KW_ONLY
 
     name: str
-    name_prefix: str = ""
-    name_fs_safe: str | None = None
+    group_name: str = ""
 
     task_number: int = field(init=False)
 
@@ -277,11 +280,6 @@ class Task:
     __post_init_called: bool = False
 
     def __post_init__(self):
-        if self.name_prefix != "":
-            self.name = f"{self.name_prefix}: {self.name}"
-
-        self.name_fs_safe = ''.join([c if (c.lower() >= 'a' and c.lower() <= 'z') or (c >= '0' and c <= '9') else '-' for c in self.name])
-
         self.repo_heads = self.get_repo_heads()
         self.task_number = self.m.next_task_number()
 
@@ -540,7 +538,10 @@ class Task:
         return self.__cached('subject', self._mail_subject, fill_cache)
 
     def _mail_subject(self):
-        return f"{self.name}"
+        if len(self.group_name) > 0:
+            return f'{self.name} for {self.group_name}'
+
+        return self.name
 
     def mail_body(self, fill_cache=False) -> (str, (str, str), str):
         return self.__cached('body', lambda: self._mail_body(False), fill_cache)
@@ -549,7 +550,7 @@ class Task:
         return self.__cached('body_simplified', lambda: self._mail_body(True), fill_cache)
 
     def _mail_body_html_title(self):
-        return f'<span class="task-title"><b>{self.name}</b> {self.state_html()} <span style="width: 250px">{self.took()}</span> Task <a href="http://{self.m.get_fqdn()}#task-{self.task_number}">#{self.task_number}</a> Build <a href="http://{self.m.get_fqdn()}#build-{self.build_number}">#{self.build_number}</a></span>'
+        return f'<span class="task-title"><b style="width: 200px">{self.name + (":" if len(self.group_name) > 0 else "")}</b> <b style="width: 200px">{self.group_name}</b> {self.state_html()} <span style="width: 250px">{self.took()}</span> Task <a href="http://{self.m.get_fqdn()}#task-{self.task_number}">#{self.task_number}</a> Build <a href="http://{self.m.get_fqdn()}#build-{self.build_number}">#{self.build_number}</a></span>'
 
     def _mail_body_html_details(self, content, details_open: bool = False):
         return dedent(f"""\
@@ -564,7 +565,7 @@ class Task:
 
     # Return plain text and HTML version
     def _mail_body(self, simplified: bool) -> (str, (str, str), str):
-        plain = f"{self.name} {self.state} {self.took()} Task #{self.task_number} Build #{self.build_number}"
+        plain = f"{self.name + ((" for " + self.group_name) if len(self.group_name) > 0 else "")} {self.state} {self.took()} Task #{self.task_number} Build #{self.build_number}"
 
         if not simplified and self._log.tell() != 0:
             html = self._mail_body_html_details(f'<pre class="task-log">{self._log.getvalue().rstrip()}</pre>')
@@ -574,7 +575,8 @@ class Task:
         return plain, ('', ''), html
 
     def mail_add_attachments(self, d: Path):
-        (d / f"{self.task_number}-{self.name_fs_safe}-log.txt").write_bytes(self._log.getvalue().encode('utf-8'))
+        full_name = self.name + ((" for " + self.group_name) if len(self.group_name) > 0 else "")
+        (d / f"{self.task_number}-{make_fs_safe(full_name)}-log.txt").write_bytes(self._log.getvalue().encode('utf-8'))
 
     def mail_recipients(self) -> list[str]:
         if self.state in ['timed_out', 'failed']:
@@ -621,7 +623,7 @@ class RunProcess(Task):
 
     def _start(self):
         with tfutil.ChangedDirectory(self.working_dir):
-            self.log(f"{datetime.now().isoformat()} Starting {self.name} ({self.cmd if isinstance(self.cmd, str) else ' '.join(self.cmd)}) in {self.working_dir.resolve(strict=True)}")
+            self.log(f"{datetime.now().isoformat()} Starting {self.name}{(" for " + self.group_name) if len(self.group_name) > 0 else ""} ({self.cmd if isinstance(self.cmd, str) else ' '.join(self.cmd)}) in {self.working_dir.resolve(strict=True)}")
 
             os_environ_set = set(os.environ.items())
             env_set = set(self.env_vars.items())
@@ -729,7 +731,7 @@ class RunProcess(Task):
         return []
 
     def __str__(self):
-        return super().__str__() + f" {self.name}"
+        return super().__str__() + f': {self.name}{(" for " + self.group_name) if len(self.group_name) > 0 else ""}'
 
 
 @dataclass(eq=False)
@@ -1032,7 +1034,8 @@ class RunTests(RunOnTestbox):
 
     def mail_add_attachments(self, d: Path):
         super().mail_add_attachments(d)
-        (d / f"{self.task_number}-{self.name_fs_safe}-junit.xml").write_bytes(self.stdout[self.stdout.find(b'<?xml version="1.0" ?>'):])
+        full_name = self.name + (" for " + self.group_name) if len(self.group_name) > 0 else ""
+        (d / f"{self.task_number}-{make_fs_safe(full_name)}-junit.xml").write_bytes(self.stdout[self.stdout.find(b'<?xml version="1.0" ?>'):])
 
 
 @dataclass(eq=False)
@@ -1314,7 +1317,6 @@ def format_html(tasks: list[Task], simplified: bool = False, separate_builds: bo
                 }
                 .task-title > b {
                     display: inline-block;
-                    width: 400px;
                 }
                 .task-title > span {
                     display: inline-block;
@@ -1510,19 +1512,19 @@ def build_pipeline(m: 'Main', env_pattern_globs: tuple[str] = ('*',), force_buil
         print(tb_type, m.resources.all_testbox_types)
 
         if tb_type not in m.resources.all_testbox_types:
-            return CompileFirmware(m, build_number=build_number, name_prefix=e.name, env=e)
+            return CompileFirmware(m, build_number=build_number, group_name=e.name, env=e)
 
         return \
-            CompileFirmware(m, build_number=build_number, name_prefix=e.name, env=e).then(lambda compile_firmware:
-            AcquireTestbox(m, build_number=build_number, name_prefix=e.name, required_testbox_type=tb_type)
-                .finally_(lambda at: ReleaseTestbox(m, build_number=build_number, name_prefix=e.name, testbox=at.testbox))
+            CompileFirmware(m, build_number=build_number, group_name=e.name, env=e).then(lambda compile_firmware:
+            AcquireTestbox(m, build_number=build_number, group_name=e.name, required_testbox_type=tb_type)
+                .finally_(lambda at: ReleaseTestbox(m, build_number=build_number, group_name=e.name, testbox=at.testbox))
                 .then(lambda at:
-            PrepareRPI(m, build_number=build_number, name_prefix=e.name, testbox=at.testbox,
+            PrepareRPI(m, build_number=build_number, group_name=e.name, testbox=at.testbox,
                 esp32_master_repo=e.working_dir).then(lambda _:
-            UploadFirmware(m, build_number=build_number, name_prefix=e.name, testbox=at.testbox,
+            UploadFirmware(m, build_number=build_number, group_name=e.name, testbox=at.testbox,
                 file=artifacts_to_firmware(compile_firmware.artifacts)).then(lambda _:
-            FlashFirmware(m, build_number=build_number, name_prefix=e.name, testbox=at.testbox).then(lambda _:
-            RunTests(m, build_number=build_number, name_prefix=e.name, testbox=at.testbox)
+            FlashFirmware(m, build_number=build_number, group_name=e.name, testbox=at.testbox).then(lambda _:
+            RunTests(m, build_number=build_number, group_name=e.name, testbox=at.testbox)
             )))))
 
     def filter_envs(envs: list[Environment]):
