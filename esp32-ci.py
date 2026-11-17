@@ -915,7 +915,7 @@ class FlashFirmware(RunOnTestbox):
             "ssh",
             f"{self.testbox.pi_user}@{self.testbox.pi_host}",
             "-t",
-            f"bash -lc \"cd ~/tf/esp32-firmware/software; ./ff --no-serial --port /dev/ttyUSB0 /tmp/firmware.bin --factory-reset --exit-on-network-connected\""
+            "bash -lc \"cd ~/tf/esp32-firmware/software; ./ff --no-serial --port /dev/ttyUSB0 /tmp/firmware.bin --factory-reset --exit-on-network-connected\""
         ]
 
 
@@ -1463,7 +1463,7 @@ class SendEmail(Task):
             proc = subprocess.run(["7z", "a", "-t7z", "-mx9", str(dst), str(dst_dir / "*")], check=True, capture_output=True, text=True)
             self.log(proc.stdout)
             self.log(proc.stderr)
-            msg.add_attachment(dst.read_bytes(), maintype="application", subtype="x-7z-compressed", filename=f"logs.7z")
+            msg.add_attachment(dst.read_bytes(), maintype="application", subtype="x-7z-compressed", filename="logs.7z")
 
         if self.m.config.smtp_debug:
             with open(f"/tmp/{self.task_number}.eml", 'wb') as fp:
@@ -1630,7 +1630,7 @@ class Main:
                         styles.update(s)
                         html += h
 
-                        html += dedent(f"""\
+                        html += dedent("""\
                             <div><h3 style="display: inline-block">Completed Tasks</h3>
                                 <input type="checkbox"
                                        id="hide_completed"
