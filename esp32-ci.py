@@ -708,10 +708,20 @@ class RunProcess(Task):
 
         plain = super()._mail_body(False)[0]
 
-        html = self._mail_body_html_details(f"""\
-            <div class="body_foreground body_background" style="font-size: normal; padding: 10px;">
-                <pre class="ansi2html-content">{Ansi2HTMLConverter().convert(self._log.getvalue().rstrip(), full=False)}</pre>
-            </div>""")
+        if self.state == 'enqueued':
+            details = f'Will run command: {self.cmd if isinstance(self.cmd, str) else ' '.join(self.cmd)}'
+        else:
+            log = self._log.getvalue().rstrip()
+
+            if len(log) == 0:
+                details = f'No output from command: {self.cmd if isinstance(self.cmd, str) else ' '.join(self.cmd)}'
+            else:
+                details = f"""\
+                    <div class="body_foreground body_background" style="font-size: normal; padding: 10px;">
+                        <pre class="ansi2html-content">{Ansi2HTMLConverter().convert(log, full=False)}</pre>
+                    </div>"""
+
+        html = self._mail_body_html_details(details)
 
         return plain, ('run_process', Ansi2HTMLConverter().produce_headers()), html
 
