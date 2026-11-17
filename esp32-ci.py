@@ -553,7 +553,7 @@ class Task:
                 <details class="task-{self.state}">
                     <summary>{html}</summary>
                     <span id="task-{self.task_number}"></span>
-                    <pre>{self._log.getvalue()}</pre>
+                    <pre>{self._log.getvalue().rstrip()}</pre>
                 </details>
             """)
         else:
@@ -703,7 +703,7 @@ class RunProcess(Task):
         plain = super()._mail_body()[0]
 
         html = self._mail_body_html_details(f"""<div class="body_foreground body_background" style="font-size: normal; padding: 10px;">
-                    <pre class="ansi2html-content">{Ansi2HTMLConverter().convert(self._log.getvalue().strip(), full=False)}</pre>
+                    <pre class="ansi2html-content">{Ansi2HTMLConverter().convert(self._log.getvalue().rstrip(), full=False)}</pre>
                 </div>""")
 
         return plain, ('run_process', Ansi2HTMLConverter().produce_headers()), html
@@ -1282,7 +1282,7 @@ class PullRepos(Task):
                             <summary>
                                 {html_summary}
                             </summary>
-                            <pre style="padding-left: 18px;">{message}</pre>
+                            <pre style="padding-left: 18px;">{message.rstrip()}</pre>
                         </details></div>""")
                 else:
                     html = f'<div style="padding-left: 18px;">{html_summary}</div>'
