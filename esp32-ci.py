@@ -78,7 +78,6 @@ import threading
 import typing
 import io
 import traceback
-import html
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 import signal
 from fnmatch import fnmatch
@@ -119,7 +118,7 @@ class CIState:
 
     def write(self, workspace_dir: Path):
         f = workspace_dir / "ci_state.json"
-        (workspace_dir / "ci_state.json").write_text(json.dumps(asdict(self)))
+        f.write_text(json.dumps(asdict(self)))
 
 
 @dataclass
@@ -375,7 +374,7 @@ class Task:
         if self._then is not None and self.state == 'finished':
             try:
                 new_tasks = self._then(self)
-            except Exception as e:
+            except Exception:
                 self.log(datetime.now().isoformat(sep=' '), "Failed to create continuation tasks (by calling self._then):\n", traceback.format_exc())
                 self.state = 'failed'
 
@@ -393,7 +392,7 @@ class Task:
             else:
                 try:
                     new_tasks = self._finally(self)
-                except Exception as e:
+                except Exception:
                     self.log(datetime.now().isoformat(sep=' '), "Failed to create continuation tasks (by calling self._finally):\n", traceback.format_exc())
                     self.state = 'failed'
 
@@ -421,7 +420,7 @@ class Task:
             self.start_datetime = datetime.now().replace(microsecond=0)
             try:
                 new_state = self.__verify_state(self._start())
-            except Exception as e:
+            except Exception:
                 self.log(datetime.now().isoformat(sep=' '), "Failed to start task:\n", traceback.format_exc())
                 new_state = 'failed'
 
@@ -437,7 +436,7 @@ class Task:
         if self.state == 'running':
             try:
                 new_state = self.__verify_state(self._abort())
-            except Exception as e:
+            except Exception:
                 self.log(datetime.now().isoformat(sep=' '), "Failed to abort task:\n", traceback.format_exc())
                 new_state = 'failed'
         elif self.state == 'enqueued':
@@ -459,7 +458,7 @@ class Task:
 
             try:
                 new_state = self.__verify_state(self._tick())
-            except Exception as e:
+            except Exception:
                 self.log(datetime.now().isoformat(sep=' '), "Failed to tick task:\n", traceback.format_exc())
                 new_state = 'failed'
 
@@ -1149,7 +1148,7 @@ class PullRepos(Task):
                     case 'something':
                         found_commits = True
 
-        except Exception as e:
+        except Exception:
             self.log(traceback.format_exc())
             self._q.put('failed')
             return
