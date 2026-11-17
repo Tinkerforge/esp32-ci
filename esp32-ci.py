@@ -273,7 +273,6 @@ class Task:
     end_timestamp: float = None
     end_datetime: datetime = None
 
-
     state: State = 'enqueued'
     _log: io.StringIO = field(default_factory=io.StringIO)
 
@@ -682,7 +681,6 @@ class RunProcess(Task):
             self.log(self.stderr.decode('utf-8'))
             self.log("============ End stderr ============")
 
-
     def _communicate(self):
         output = self.proc.stdout.read()
         if output is not None:
@@ -692,7 +690,6 @@ class RunProcess(Task):
             output = self.proc.stderr.read()
             if output is not None:
                 self.stderr += output
-
 
     def _mail_body_html_details(self, content):
         return dedent(f"""\
@@ -828,7 +825,6 @@ class RunOnTestbox(RunProcess):
     _: KW_ONLY
 
     testbox: Testbox
-
 
 
 @dataclass(eq=False)
@@ -987,8 +983,6 @@ class RunTests(RunOnTestbox):
         if not tests_executed:
             return super()._mail_body()
 
-
-
         style_start = self.html_summary.index('<style type="text/css">')
         style_end = self.html_summary.index('</style>') + len('</style>')
 
@@ -1018,7 +1012,6 @@ class RunTests(RunOnTestbox):
                 <th class="{result}">{result.title()}</th>''')
             )
         style += "<script>window.addEventListener(\"load\", (event) => document.querySelectorAll('tr:has(td.mx-res-passed)').forEach(x => x.hidden = true));</script>"
-
 
         details_start = self.html_details.index('</h1>') + len('</h1>')
         details_end = self.html_details.index('<p class="footer">')
@@ -1484,7 +1477,6 @@ class SendEmail(Task):
         return 'finished'
 
 
-
 def build_pipeline(m: 'Main', env_pattern_globs: tuple[str] = ('*',), force_build=False):
     def env_to_testbox_type(e: Environment, config: Config):
         env_name = e.name
@@ -1612,7 +1604,6 @@ class Main:
                                 continue
 
                             t.abort()
-
 
                     case ['build', env_patterns]:
                         print('build', env_patterns)
