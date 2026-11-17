@@ -406,10 +406,11 @@ class Task:
             t.parent = self.task_number
             self.m.enqueue(t)
 
-    def can_start(self, resources: Resources):
+    def can_start(self, resources: Resources) -> bool:
         if not self.__post_init_called:
             self.log("Task.__post_init__ was not called. Was this function overwritten without a super().__post_init__() call?")
-            new_state = 'failed'
+            self.__set_state('failed')
+            return True
 
         return self._can_start(resources)
 
