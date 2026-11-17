@@ -1468,10 +1468,10 @@ class SendEmail(Task):
         if self.m.config.smtp_debug:
             with open(f"/tmp/{self.task_number}.eml", 'wb') as fp:
                 fp.write(msg.as_bytes(policy=SMTP))
-
-        with smtplib.SMTP_SSL(self.m.config.smtp_server) as smtp:
-            smtp.login(self.m.config.smtp_user, self.m.config.smtp_pass)
-            smtp.send_message(msg)
+        else:
+            with smtplib.SMTP_SSL(self.m.config.smtp_server) as smtp:
+                smtp.login(self.m.config.smtp_user, self.m.config.smtp_pass)
+                smtp.send_message(msg)
 
         return 'finished'
 
