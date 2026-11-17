@@ -1028,7 +1028,7 @@ class RunTests(RunOnTestbox):
 
     def mail_add_attachments(self, d: Path):
         super().mail_add_attachments(d)
-        (d / f"{self.task_number}-{self.name}-junit.xml").write_bytes(self.stdout[self.stdout.find(b'<?xml version="1.0" ?>'):])
+        (d / f"{self.task_number}-{self.name_fs_safe}-junit.xml").write_bytes(self.stdout[self.stdout.find(b'<?xml version="1.0" ?>'):])
 
 
 @dataclass(eq=False)
