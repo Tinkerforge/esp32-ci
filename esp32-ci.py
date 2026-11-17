@@ -1254,8 +1254,8 @@ class PullRepos(Task):
                 plain = f'{summary:<73} {actors} {c.hexsha[:8]} +{c.stats.total['insertions']} -{c.stats.total['deletions']}'
                 url = c.repo.remotes[0].url
 
-                if "git@github.com" in url:
-                    repo = url.split(":", maxsplit=1)[1]
+                if "git@github.com:" in url:
+                    repo = url.removeprefix('git@github.com:').removesuffix('.git')
                     link = f'<a href="https://github.com/{repo}/commit/{c.hexsha}">{c.hexsha[:8]}</a>'
                 else:
                     link = f'{c.hexsha[:8]}'
