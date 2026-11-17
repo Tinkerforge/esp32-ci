@@ -226,6 +226,7 @@ class Task:
 
     name: str
     name_prefix: str = ""
+    name_fs_safe: str | None = None
 
     task_number: int = field(init=False)
 
@@ -280,6 +281,8 @@ class Task:
     def __post_init__(self):
         if self.name_prefix != "":
             self.name = f"{self.name_prefix}: {self.name}"
+
+        self.name_fs_safe = ''.join([c if (c.lower() >= 'a' and c.lower() <= 'z') or (c >= '0' and c <= '9') else '-' for c in self.name])
 
         self.repo_heads = self.get_repo_heads()
         self.task_number = self.m.next_task_number()
@@ -562,7 +565,7 @@ class Task:
         return plain, ('', ''), html
 
     def mail_add_attachments(self, d: Path):
-        (d / f"{self.task_number}-log.txt").write_bytes(self._log.getvalue().encode('utf-8'))
+        (d / f"{self.task_number}-{self.name_fs_safe}-log.txt").write_bytes(self._log.getvalue().encode('utf-8'))
 
     def mail_recipients(self) -> list[str]:
         if self.state in ['timed_out', 'failed']:
@@ -707,9 +710,6 @@ class RunProcess(Task):
                 </div>""")
 
         return plain, ('run_process', Ansi2HTMLConverter().produce_headers()), html
-
-    def mail_add_attachments(self, d: Path):
-        (d / f"{self.task_number}-{self.name}-log.txt").write_bytes(self._log.getvalue().encode('utf-8'))
 
     def mail_recipients(self):
         return []
