@@ -916,7 +916,7 @@ class FlashFirmware(RunOnTestbox):
             "ssh",
             f"{self.testbox.pi_user}@{self.testbox.pi_host}",
             "-t",
-            "bash -lc \"cd ~/tf/esp32-firmware/software; ./ff --no-serial --port /dev/ttyUSB0 /tmp/firmware.bin --factory-reset --exit-on-network-connected\""
+            "bash -lc \"cd ~/tf/esp32-firmware/software; TTY_COMPATIBLE=0 ./ff --no-serial --port /dev/ttyUSB0 /tmp/firmware.bin --factory-reset --exit-on-network-connected\""
         ]
 
 
