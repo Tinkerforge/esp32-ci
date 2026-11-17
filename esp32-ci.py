@@ -882,7 +882,7 @@ class PrepareRPI(RunOnTestbox):
         super().__post_init__()
         prefix = 'esp32-ci_' + hex(random.getrandbits(32))[2:]  # drop 0x
 
-        self.cmd = f'git archive --prefix={prefix}/ HEAD . | (cd /tmp/ && tar -xf -) && rsync --mkpath --inplace --recursive --delete --filter="-r .venv" /tmp/{prefix}/ {self.testbox.pi_user}@{self.testbox.pi_host}:~/tf/esp32-firmware/software && rm -r /tmp/{prefix}'
+        self.cmd = f'git archive --prefix={prefix}/ HEAD . | (cd /tmp/ && tar -xf -) && rsync --mkpath --inplace --recursive --delete --filter="-r .venv" /tmp/{prefix}/ {self.testbox.pi_user}@{self.testbox.pi_host}:~/tf/esp32-firmware/software; rm -r /tmp/{prefix}'
 
         self.working_dir = self.esp32_master_repo.resolve(strict=True)
         self.popen_args = {"shell": True}
