@@ -242,8 +242,6 @@ class Task:
     # Set to false if this task can't be aborted
     abortable: bool = True
 
-    hide_when_skipped: bool = True
-    hide_when_finished: bool = True
     remove_when_skipped: bool = False
 
     # in seconds. Set to -1 to run without timeout
@@ -536,6 +534,7 @@ class Task:
     def fill_cache(self):
         self.mail_subject(fill_cache=True)
         self.mail_body(fill_cache=True)
+        self.mail_body_simplified(fill_cache=True)
 
     def mail_subject(self, fill_cache=False):
         return self.__cached('subject', self._mail_subject, fill_cache)
@@ -544,23 +543,33 @@ class Task:
         return f"{self.name}"
 
     def mail_body(self, fill_cache=False) -> (str, (str, str), str):
-        return self.__cached('body', self._mail_body, fill_cache)
+        return self.__cached('body', lambda: self._mail_body(False), fill_cache)
+
+    def mail_body_simplified(self, fill_cache=False) -> (str, (str, str), str):
+        return self.__cached('body_simplified', lambda: self._mail_body(True), fill_cache)
+
+    def _mail_body_html_title(self):
+        return f'<span class="task-title"><b>{self.name}</b> {self.state_html()} <span style="width: 250px">{self.took()}</span> Task <a href="http://{self.m.get_fqdn()}#task-{self.task_number}">#{self.task_number}</a> Build <a href="http://{self.m.get_fqdn()}#build-{self.build_number}">#{self.build_number}</a></span>'
+
+    def _mail_body_html_details(self, content, details_open: bool = False):
+        return dedent(f"""\
+            <div class="task-state-{self.state}">
+                <details class="task-details"{" open" if details_open else ""}>
+                    <summary>{self._mail_body_html_title()}</summary>
+                    <span id="task-{self.task_number}"></span>
+                    <div class="task-details-content">{content}</div>
+                </details>
+            </div>
+        """)
 
     # Return plain text and HTML version
-    def _mail_body(self) -> (str, (str, str), str):
+    def _mail_body(self, simplified: bool) -> (str, (str, str), str):
         plain = f"{self.name} {self.state} {self.took()} Task #{self.task_number} Build #{self.build_number}"
 
-        html = f'<b>{self.name}</b> {self.state_html()} <span style="width: 250px">{self.took()}</span> Task <a href="http://{socket.gethostname()}.localdomain#task-{self.task_number}">#{self.task_number}</a> Build <a href="http://{socket.gethostname()}.localdomain#build-{self.build_number}">#{self.build_number}</a>'
-        if self._log.tell() != 0:
-            html = dedent(f"""\
-                <details class="task-{self.state}">
-                    <summary>{html}</summary>
-                    <span id="task-{self.task_number}"></span>
-                    <pre>{self._log.getvalue().rstrip()}</pre>
-                </details>
-            """)
+        if not simplified and self._log.tell() != 0:
+            html = self._mail_body_html_details(f'<pre class="task-log">{self._log.getvalue().rstrip()}</pre>')
         else:
-            html = f'<span class="task-{self.state}" id="task-{self.task_number}">{html}</span>'
+            html = f'<div class="task-state-{self.state}" id="task-{self.task_number}">{self._mail_body_html_title()}</div>'
 
         return plain, ('', ''), html
 
@@ -693,21 +702,16 @@ class RunProcess(Task):
             if output is not None:
                 self.stderr += output
 
-    def _mail_body_html_details(self, content):
-        return dedent(f"""\
-            <details class="task-{self.state}">
-                <summary><b>{self.name}</b> {self.state_html()} <span style="width: 250px">{self.took()}</span> Task <a href="http://{socket.gethostname()}.localdomain#task-{self.task_number}">#{self.task_number}</a> Build <a href="http://{socket.gethostname()}.localdomain#build-{self.build_number}">#{self.build_number}</a></summary>
-                <span id="task-{self.task_number}"></span>
-                {content}
-            </details>
-        """)
+    def _mail_body(self, simplified: bool):
+        if simplified:
+            return super()._mail_body(True)
 
-    def _mail_body(self):
-        plain = super()._mail_body()[0]
+        plain = super()._mail_body(False)[0]
 
-        html = self._mail_body_html_details(f"""<div class="body_foreground body_background" style="font-size: normal; padding: 10px;">
-                    <pre class="ansi2html-content">{Ansi2HTMLConverter().convert(self._log.getvalue().rstrip(), full=False)}</pre>
-                </div>""")
+        html = self._mail_body_html_details(f"""\
+            <div class="body_foreground body_background" style="font-size: normal; padding: 10px;">
+                <pre class="ansi2html-content">{Ansi2HTMLConverter().convert(self._log.getvalue().rstrip(), full=False)}</pre>
+            </div>""")
 
         return plain, ('run_process', Ansi2HTMLConverter().produce_headers()), html
 
@@ -797,10 +801,7 @@ class AcquireTestbox(Task):
 
     name: str = "Acquire testbox"
     timeout: float = 1
-    hide_when_finished: bool = False
-
     required_testbox_type: str
-
     testbox: Testbox | None = None
 
     def __post_init__(self):
@@ -832,8 +833,6 @@ class ReleaseTestbox(Task):
 
     name: str = "Release testbox"
     timeout: float = 1
-    hide_when_finished: bool = False
-
     testbox: Testbox
 
     def __post_init__(self):
@@ -862,12 +861,10 @@ class PrepareRPI(RunOnTestbox):
     _: KW_ONLY
 
     esp32_master_repo: Path
-
     timeout: float = 10
     name: str = "Prepare Raspberry Pi"
     working_dir: Path = Path(".")
     cmd: list[str] = field(init=False)
-    hide_when_finished: bool = False
 
     def __post_init__(self):
         super().__post_init__()
@@ -884,12 +881,10 @@ class UploadFirmware(RunOnTestbox):
     _: KW_ONLY
 
     file: Path
-
     timeout: float = 10
     name: str = "Upload firmware"
     working_dir: Path = Path(".")
     cmd: list[str] = field(init=False)
-    hide_when_finished: bool = False
 
     def __post_init__(self):
         super().__post_init__()
@@ -908,7 +903,6 @@ class FlashFirmware(RunOnTestbox):
     name: str = "Flash firmware"
     working_dir: Path = Path(".")
     cmd: list[str] = field(init=False)
-    hide_when_finished: bool = False
 
     def __post_init__(self):
         super().__post_init__()
@@ -977,11 +971,11 @@ class RunTests(RunOnTestbox):
         if plain_matrix.result_stats.get(CaseResult.FAILED, 0) != 0:
             return 'failed'
 
-    def _mail_body(self):
+    def _mail_body(self, simplified: bool):
         tests_executed = self.state == 'finished' or self.state == 'failed' and self.html_details is not None
 
-        if not tests_executed:
-            return super()._mail_body()
+        if simplified or not tests_executed:
+            return super()._mail_body(simplified)
 
         style_start = self.html_summary.index('<style type="text/css">')
         style_end = self.html_summary.index('</style>') + len('</style>')
@@ -1017,11 +1011,11 @@ class RunTests(RunOnTestbox):
         details_end = self.html_details.index('<p class="footer">')
         details = self.html_details[details_start:details_end]
 
-        table = f'<div class="junit">{table} <details><summary>Test results</summary>{details}</details></div>'
+        table = f'<div class="junit">{table} <details><summary style="margin-left: 1em;"><b>Test results</b></summary>{details}</details></div>'
 
         table = re.sub(r'(href=")([^"]*)(")', lambda match: f"{match.group(1)}#{"".join(match.group(2).rsplit('#')[-1])}{match.group(3)}", table)
 
-        plain, _style, _html = super()._mail_body()
+        plain, _, _ = super()._mail_body(False)
         plain += "\n" + indent(self.plain_summary, "    ")
 
         return plain, ('run_tests', style), super()._mail_body_html_details(table)
@@ -1039,7 +1033,6 @@ class PullRepos(Task):
 
     timeout: float = 30
 
-    hide_when_skipped: bool = False
     remove_when_skipped: bool = True
 
     thread: threading.Thread = None
@@ -1182,23 +1175,16 @@ class PullRepos(Task):
 
         return envs
 
-    def _mail_body(self):
-        if self.state != 'finished':
-            return super()._mail_body()
+    def _mail_body(self, simplified: bool):
+        if simplified or self.state != 'finished':
+            return super()._mail_body(simplified)
 
-        commits = self.get_commits()
+        commits_plain, commits_html = self.format_commits(self.get_commits())
 
-        commits_plain, commits_html = self.format_commits(commits)
-
-        html = dedent(f"""\
-            <details class="task-{self.state}" style="display: block;" open>
-                <summary><b>Pulling repos</b> {self.state_html()} <span style="width: 250px">{self.took()}</span> Task <a href="http://{socket.gethostname()}.localdomain#task-{self.task_number}">#{self.task_number}</a> Build <a href="http://{socket.gethostname()}.localdomain#build-{self.build_number}">#{self.build_number}</a></summary>
-                <div style="padding-left: 64px" class="commits">{commits_html}</div>
-            </details>
-        """)
-
-        plain = super()._mail_body()[0]
+        plain = super()._mail_body(False)[0]
         plain += f"\n{indent(commits_plain, "    ")}"
+
+        html = self._mail_body_html_details(f'<div style="margin-left: 1em;" class="commits">{commits_html}</div>', details_open=True)
 
         return plain, ("pull_repos", "<style>.commits div:nth-child(odd) {background: #eeeeee;}</style>"), html
 
@@ -1274,7 +1260,7 @@ class PullRepos(Task):
                 else:
                     link = f'{c.hexsha[:8]}'
 
-                html_summary = f'<code style="height: 1.2rem; display: inline-block; align-content: center;">{summary}{"&nbsp;" * (73 - len(summary))} {actors.replace(" ", "&nbsp;")} {link}</code>'
+                html_summary = f'<code style="height: 1.2rem; display: inline-block; align-content: center;">{summary}{"&nbsp;" * (81 - len(summary))} {actors.replace(" ", "&nbsp;")} {link}&nbsp;</code>'
 
                 if len(message) > 0:
                     html = dedent(f"""\
@@ -1282,7 +1268,7 @@ class PullRepos(Task):
                             <summary>
                                 {html_summary}
                             </summary>
-                            <pre style="padding-left: 18px;">{message.rstrip()}</pre>
+                            <pre style="padding: 0.5em 0 0.5em 18px; margin: 0;">{message.rstrip()}</pre>
                         </details></div>""")
                 else:
                     html = f'<div style="padding-left: 18px;">{html_summary}</div>'
@@ -1299,23 +1285,38 @@ class PullRepos(Task):
         return self.build_number
 
 
-def format_html(tasks: list[Task], separate_builds=False) -> (str, str, str):
+def format_html(tasks: list[Task], simplified: bool = False, separate_builds: bool = False) -> (str, str, str):
     styles = {
         "base": dedent("""\
             <style>
-                details {
+                h3 {
+                    margin: 1em 0 0.5em 0;
+                }
+                form {
+                    margin: 0;
+                }
+                pre.task-log {
+                    margin: 0;
+                }
+                details.task-details {
                     display: block;
                     width: fit-content;
                 }
-                /*.task-hidden {
-                    display: none
-                }*/
-                details > summary > b {
+                .task-title > b {
                     display: inline-block;
                     width: 400px;
                 }
-                details > summary > span {
+                .task-title > span {
                     display: inline-block;
+                }
+                .task-details-content {
+                    margin: 0.5em 0 1em 0;
+                }
+                div:last-child > details.task-details .task-details-content {
+                    margin-bottom: 0;
+                }
+                .junit > details {
+                    margin-top: 0.5em;
                 }
                 hr.build-separator {
                     border: none;
@@ -1347,11 +1348,10 @@ def format_html(tasks: list[Task], separate_builds=False) -> (str, str, str):
         tasks = sorted(tasks, key=lambda t: t.build_number if t.build_number != None else 2**32, reverse=True)
 
     for t in tasks:
-        p, s, h = t.mail_body()
-
-        if (t.state == 'skipped' and not t.hide_when_skipped) or \
-           (t.state == 'finished' and not t.hide_when_finished):
-            h = f'<div class="task-hidden">{h}</div>'
+        if simplified:
+            p, s, h = t.mail_body_simplified()
+        else:
+            p, s, h = t.mail_body()
 
         styles[s[0]] = s[1]
         plain += "\n" + p
@@ -1370,10 +1370,7 @@ class SendEmail(Task):
     _: KW_ONLY
 
     name: str = 'Send email'
-    hide_when_skipped: bool = False
-
     sent_ci_fixed: bool = True
-
     timeout: float = -1
 
     def _start(self):
@@ -1418,9 +1415,7 @@ class SendEmail(Task):
 
         msg = EmailMessage()
 
-        plain, styles, html = format_html(reversed(tasks))
-
-        html = "</summary>".join(x[max(0, x.find("</details>")):] for x in html.split("</summary>"))
+        plain, styles, html = format_html(reversed(tasks), simplified=True)
 
         html = dedent(f"""\
             <html>
@@ -1537,8 +1532,9 @@ def build_pipeline(m: 'Main', env_pattern_globs: tuple[str] = ('*',), force_buil
 
 
 class Main:
-    def __init__(self, q: Queue, workspace: Path, force_build: bool = False):
+    def __init__(self, q: Queue, workspace: Path, listen_port: int, force_build: bool = False):
         self.workspace = workspace.resolve(strict=True)
+        self.listen_port = listen_port
         self.force_build = force_build
 
         self.config = Config.read(self.workspace)
@@ -1549,6 +1545,14 @@ class Main:
         self.q = q
         self.thread = threading.Thread(target=self.main, daemon=True)
         self.thread.start()
+
+    def get_fqdn(self):
+        fqdn = socket.gethostname() + '.localdomain'
+
+        if self.listen_port != 80:
+            fqdn += f':{self.listen_port}'
+
+        return fqdn
 
     def next_task_number(self):
         ci_state = CIState.read(self.workspace)
@@ -1623,23 +1627,23 @@ class Main:
                         html += '<div><h3 style="display: inline-block">Enqueued Tasks</h3></div>'
                         _, s, h = format_html(reversed(self._task_queue))
                         styles.update(s)
-                        html += h
+                        html += f'<div>{h}</div>'
 
                         html += '<div><h3 style="display: inline-block">Running Tasks</h3> <form style="display: inline-block;" method="POST" action="abort/*"><button>Abort all</button></form></div>'
                         _, s, h = format_html(reversed(self.running_tasks))
                         styles.update(s)
-                        html += h
+                        html += f'<div>{h}</div>'
 
                         html += dedent("""\
                             <div><h3 style="display: inline-block">Completed Tasks</h3>
                                 <input type="checkbox"
                                        id="hide_completed"
-                                       onchange="document.querySelectorAll('.task-finished').forEach(x => x.style.display = (event.target.checked ? 'none' : null))">
+                                       onchange="document.querySelectorAll('.task-state-finished').forEach(x => x.style.display = (event.target.checked ? 'none' : null))">
                                 <label for="hide_completed">Hide finished</label></div>
                             """)
                         _, s, h = format_html(reversed(self.completed_tasks), separate_builds=True)
                         styles.update(s)
-                        html += h
+                        html += f'<div>{h}</div>'
 
                         html = dedent(f"""\
                             <html>
@@ -1748,6 +1752,6 @@ if __name__ == '__main__':
         sys.exit(1)
 
     to_main = Queue()
-    main = Main(to_main, ws, args.force_build)
+    main = Main(to_main, ws, args.listen_port, args.force_build)
 
     app.run(host='::', port=args.listen_port)
