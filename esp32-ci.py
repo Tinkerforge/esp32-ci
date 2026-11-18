@@ -550,7 +550,7 @@ class Task:
         return self.__cached('body_simplified', lambda: self._mail_body(True), fill_cache)
 
     def _mail_body_html_title(self):
-        return f'<span class="task-title"><b style="width: 200px">{self.name + (":" if len(self.group_name) > 0 else "")}</b> <b style="width: 200px">{self.group_name}</b> {self.state_html()} <span style="width: 250px">{self.took()}</span> Task <a href="http://{self.m.get_fqdn()}#task-{self.task_number}">#{self.task_number}</a> Build <a href="http://{self.m.get_fqdn()}#build-{self.build_number}">#{self.build_number}</a></span>'
+        return f'<span class="task-title"><b style="width: 200px">{self.name + (":" if len(self.group_name) > 0 else "")}</b> <b style="width: 225px">{self.group_name}</b> {self.state_html()} <span style="width: 225px">{self.took()}</span> Task <a href="http://{self.m.get_fqdn()}#task-{self.task_number}">#{self.task_number}</a> Build <a href="http://{self.m.get_fqdn()}#build-{self.build_number}">#{self.build_number}</a></span>'
 
     def _mail_body_html_details(self, content, details_open: bool = False):
         return dedent(f"""\
