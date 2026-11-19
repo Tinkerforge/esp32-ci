@@ -542,7 +542,7 @@ class Task:
         return self.__cached('body_simplified', lambda: self._mail_body(True), fill_cache)
 
     def _mail_body_html_title(self):
-        return f'<span class="task-title"><b style="width: 200px">{self.name + (":" if len(self.group_name) > 0 else "")}</b> <b style="width: 225px">{self.group_name}</b> {self.state_html()} <span style="width: 225px">{self.took()}</span> Task <a href="http://{self.m.get_fqdn()}#task-{self.task_number}">#{self.task_number}</a> Build <a href="http://{self.m.get_fqdn()}#build-{self.build_number}">#{self.build_number}</a></span>'
+        return f'<span class="task-title"><b style="width: 200px">{self.name + (":" if len(self.group_name) > 0 else "")}</b> <b style="width: 250px">{self.group_name}</b> {self.state_html()} <span style="width: 250px">{self.took()}</span> Task <a href="http://{self.m.get_fqdn()}#task-{self.task_number}">#{self.task_number}</a> Build <a href="http://{self.m.get_fqdn()}#build-{self.build_number}">#{self.build_number}</a></span>'
 
     def _mail_body_html_details(self, content, details_open: bool = False):
         return dedent(f"""\
@@ -587,7 +587,7 @@ class Task:
             case 'finished':
                 return f'<span style="width: 100px; color:green">{self.state}</span>'
             case 'timed_out' | 'failed':
-                return f'<span style="width: 100px; color:red">{self.state}</span>'
+                return f'<span style="width: 100px; color:red">{self.state.replace("_", " ")}</span>'
             case 'aborted':
                 return f'<span style="width: 100px; color:darkorange">{self.state}</span>'
 
@@ -1015,7 +1015,7 @@ class RunTests(RunOnTestbox):
         details_end = self.html_details.index('<p class="footer">')
         details = self.html_details[details_start:details_end]
 
-        table = f'<div class="junit">{table} <details><summary style="margin-left: 1em;"><b>Test results</b></summary>{details}</details></div>'
+        table = f'<div class="junit"><div class="junit-table">{table}</div><details><summary style="margin-left: 1em;"><b>Test results</b></summary>{details}</details></div>'
 
         table = re.sub(r'(href=")([^"]*)(")', lambda match: f"{match.group(1)}#{"".join(match.group(2).rsplit('#')[-1])}{match.group(3)}", table)
 
@@ -1265,7 +1265,7 @@ class PullRepos(Task):
                 else:
                     link = f'{c.hexsha[:8]}'
 
-                html_summary = f'<code style="height: 1.2rem; display: inline-block; align-content: center;">{summary}{"&nbsp;" * (81 - len(summary))} {actors.replace(" ", "&nbsp;")} {link}&nbsp;</code>'
+                html_summary = f'<code style="height: 1.2rem; display: inline-block; align-content: center;">{summary}{"&nbsp;" * (73 - len(summary))} {actors.replace(" ", "&nbsp;")} {link}&nbsp;</code>'
 
                 if len(message) > 0:
                     html = dedent(f"""\
@@ -1319,8 +1319,14 @@ def format_html(tasks: list[Task], simplified: bool = False, separate_builds: bo
                 div:last-child > details.task-details .task-details-content {
                     margin-bottom: 0;
                 }
+                .junit-table {
+                    width: 1020px;
+                }
                 .junit > details {
                     margin-top: 0.5em;
+                }
+                .commits {
+                    width: fit-content;
                 }
                 hr.build-separator {
                     border: none;
@@ -1331,7 +1337,7 @@ def format_html(tasks: list[Task], simplified: bool = False, separate_builds: bo
                     height: 5px;
                     padding: 0 10;
                     margin: 1em 0;
-                    width: 930px;
+                    width: 1000px;
                 }
                 hr.build-separator::after {
                     background: white;
