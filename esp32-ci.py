@@ -236,12 +236,6 @@ class Task:
     # build that this task is associated to
     build_number: int | None = None
 
-    # task number of parent task or None if this task has no parent
-    parent: int | None = None
-
-    # task numbers of child tasks
-    children: list[int] = field(default_factory=list)
-
     # Set to false if this task can't be aborted
     abortable: bool = True
 
@@ -399,8 +393,6 @@ class Task:
                     new_tasks = [new_tasks]
 
         for t in new_tasks:
-            self.children.append(t.task_number)
-            t.parent = self.task_number
             self.m.enqueue(t)
 
     def can_start(self, resources: Resources) -> bool:
